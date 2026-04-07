@@ -136,3 +136,15 @@ class MQTTBridge:
             self._client.publish(topic, payload=payload, qos=0, retain=False)
         except Exception:
             pass
+
+    def publish_camera_frame(self, frame_bytes: bytes):
+        if not self._running or self._client is None or not frame_bytes:
+            return
+        topic = _topic_join(
+            self._cfg["topic_prefix"],
+            self._cfg["camera_topic"],
+        )
+        try:
+            self._client.publish(topic, payload=frame_bytes, qos=0, retain=False)
+        except Exception:
+            pass

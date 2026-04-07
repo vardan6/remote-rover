@@ -33,7 +33,7 @@ load_prc_file_data("", "\n".join(_prc))
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     Vec3, Point3, AmbientLight, DirectionalLight, LColor,
-    WindowProperties, CardMaker, BitMask32, Texture, Shader
+    WindowProperties, CardMaker, BitMask32, Texture, Shader, PNMImage, StringStream
 )
 from panda3d.bullet import BulletWorld, BulletRigidBodyNode, BulletSphereShape
 from panda3d.core import (GeomNode, Geom, GeomTriangles, GeomVertexData,
@@ -49,6 +49,8 @@ from imgui_style import normalize_ui_config
 from settings import load_settings, save_settings
 from settings_gui import SettingsDialog
 from mqtt_bridge import MQTTBridge
+
+VIDEO_PUBLISH_HZ = 10
 
 
 # ── Rock mesh builder ─────────────────────────────────────────────────────────
@@ -118,6 +120,7 @@ class RoverSimulator(ShowBase):
         # Load settings first
         self._cfg = load_settings()
         self._mqtt_cfg = self._cfg.get("mqtt", {})
+        self._last_video_pub_mono = 0.0
 
         ShowBase.__init__(self)
 
@@ -731,6 +734,36 @@ class RoverSimulator(ShowBase):
         self._last_state_pub_mono = now_mono
         self._mqtt_bridge.publish_state(payload)
 
+    def _publish_video_if_due(self, now_mono):
+        video_cfg = self._cfg.get("video", {})
+        if not video_cfg.get("enabled", True):
+            return
+        if str(video_cfg.get("ingest_mode", "mqtt_frames")) != "mqtt_frames":
+            return
+
+        period = 1.0 / VIDEO_PUBLISH_HZ
+        if now_mono - self._last_video_pub_mono < period:
+            return
+
+        pov_buffer = self.cam_ctrl.pov_buffer
+        if pov_buffer is None:
+            return
+
+        image = PNMImage()
+        if not pov_buffer.getScreenshot(image):
+            return
+
+        stream = StringStream()
+        if not image.write(stream, "frame.jpg"):
+            return
+
+        frame_bytes = bytes(stream.getData())
+        if not frame_bytes:
+            return
+
+        self._last_video_pub_mono = now_mono
+        self._mqtt_bridge.publish_camera_frame(frame_bytes)
+
     def _fix_shadow_border(self, task):
         buf = self._sun_np.node().getShadowBuffer(self.win.getGsg())
         if buf is None:
@@ -803,6 +836,7 @@ class RoverSimulator(ShowBase):
         self.cam_ctrl.update()
         state_payload = self._collect_state_payload()
         self._publish_state_if_due(now_mono, state_payload)
+        self._publish_video_if_due(now_mono)
         self.gui.update_from_state(state_payload)
         mqtt_cfg = self._cfg.get("mqtt", {})
         self._status.set_mqtt_state(

@@ -1,6 +1,10 @@
 # MQTT Phase 2 Canonical Plan (Frozen)
 Date: 2026-04-05 00:58:36 (+04)
 
+> Historical frozen Phase 2 contract.
+> The current codebase has moved beyond this exact scope and now includes MQTT camera-frame publication in later work.
+> Keep this file as the Phase 2 control/telemetry contract reference, not as a complete description of current runtime behavior.
+
 ## 1. Scope (Documentation Freeze)
 This plan defines MQTT integration scope for the 3D simulator only.
 This document is rigid for implementation next steps and supersedes prior MQTT planning notes.

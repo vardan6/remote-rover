@@ -2,52 +2,57 @@
 
 ## Summary
 
-The project now has the right high-level split and the correct repository root:
+The project structure is now correct and the MQTT bootstrap path is implemented end to end:
 - the simulator remains under `3d-env/`
 - the Ground Control Station is separated into `gcs_server/`
 - the active git repository is rooted at `remote-rover/`
+- shared runtime config lives in `config/`
+- simulator control, telemetry, and camera-frame publishing are all present
 
-That separation is correct and matches the intended system boundaries better than keeping the GCS under `3d-env/`.
+That split matches the intended system boundaries better than keeping the GCS under `3d-env/`.
 
 ## What Is Good
 
-- `3d-env/` now remains focused on the simulator runtime and simulator documentation.
+- `3d-env/` remains focused on the simulator runtime and simulator documentation.
 - `gcs_server/` is physically separated and no longer mixed into the 3D environment tree.
-- The GCS reads the simulator settings file through an explicit path in `gcs_server/config.py`.
+- The simulator and GCS both read shared runtime config from `config/common.local.json` with `config/common.example.json` as fallback.
 - MQTT topic naming is consistent across simulator and GCS:
   - `control/manual`
   - `telemetry/state`
   - `camera-feed`
-- The simulator settings model now includes:
+- The shared config model includes:
   - `mqtt.camera_topic`
   - `video.*`
   - `gcs.*`
-- The simulator settings UI now exposes `camera_topic`, which closes the main config mismatch.
-- The GCS runtime compiles cleanly after the split.
-- The parent `remote-rover/` directory is now the correct place to commit and push from.
+- The simulator settings UI exposes the shared MQTT/control fields.
+- The simulator publishes JPEG frames from the POV camera buffer over MQTT when video is enabled and ingest mode is `mqtt_frames`.
+- The GCS subscribes to MQTT camera frames and relays them to browsers in `websocket_mjpeg` mode.
+- The GCS includes a dedicated MQTT setup page that edits shared `mqtt.*` config and reconnects the broker client live.
+- The GCS dashboard now includes persisted appearance/theme settings.
+- The parent `remote-rover/` directory is the correct place to commit and push from.
 
 ## Current Risks / Weak Spots
 
-### 1. Shared config is practical, but temporary
-
-The GCS currently reads and may persist settings back to:
-- `config/common.local.json`
-
-This is acceptable for now because it keeps MQTT topics and transport settings aligned in one common place, but it still mixes simulator and GCS runtime concerns into one shared JSON file.
-
-Recommendation:
-- later extract a root-level shared config file or shared config module
-- keep simulator-specific UI settings inside `3d-env/simulator/settings.json`
-
-### 2. Video path is only partially complete
+### 1. Shared config is practical, but broad
 
 Current state:
-- GCS can subscribe to MQTT camera frames
-- GCS can render camera frames received through MQTT
-- simulator does not yet publish actual camera frames to `camera-feed`
+- runtime settings are shared through `config/common.local.json`
+- simulator UI-only settings still live in `3d-env/simulator/settings.json`
+
+Recommendation:
+- keep simulator UI settings local to `3d-env/`
+- later split shared runtime config into clearer domains if the single JSON file becomes too broad
+
+### 2. Video path is implemented, but still a bootstrap transport
+
+Current state:
+- GCS subscribes to MQTT camera frames
+- GCS renders camera frames received through MQTT
+- simulator publishes JPEG frames from the Panda3D POV buffer to `camera-feed`
 
 Conclusion:
-- the end-to-end video pipeline is architected but not fully functional yet
+- the end-to-end video pipeline now works
+- the current transport is still a simple MQTT-frame bootstrap path, not a production media architecture
 
 ### 3. GCS state backend is single-instance only
 
@@ -61,26 +66,36 @@ Impact:
 Recommendation:
 - add Redis before any real scale-out deployment
 
+### 4. Runtime config editing is now simpler but still local-file based
+
+Current state:
+- GCS can read/update MQTT host, port, topics, client ID, and control rate from browser setup UI
+- Updates are written to `config/common.local.json` and applied immediately via runtime reconnect
+
+Impact:
+- operator workflow is better for broker changes
+- production secrets/config lifecycle is still unmanaged (no secret manager, no environment profile system)
+
 ## Path And File Review
 
 Verified correct:
 - `remote-rover/gcs_server/config.py` points to `remote-rover/config/common.local.json` with fallback to `remote-rover/config/common.example.json`
-- `remote-rover/requirements-gcs.txt` contains only GCS dependencies
-- `remote-rover/3d-env/requirements.txt` no longer contains web-server dependencies
+- `remote-rover/gcs_server/requirements-gcs.txt` contains only GCS dependencies
+- `remote-rover/3d-env/requirements.txt` contains simulator dependencies
 - `remote-rover/gcs_server/GCS-web-app.md` exists with the GCS code
-- root `.gitignore` now excludes local editor/runtime state
+- root `.gitignore` excludes local editor/runtime state
 
 ## Useful Conclusions
 
 1. The simulator and GCS should remain separate applications.
 2. Separate Python environments are the correct default.
-3. Shared MQTT topic config is useful now, and it is no longer stored in simulator-owned files.
-4. The highest-value next implementation step is simulator camera frame publishing.
-5. The repository root is now in the right place; the next cleanup is config extraction, not repo restructuring.
+3. Shared MQTT topic config is useful now and is no longer stored in simulator-owned files.
+4. The MQTT bootstrap path is now working end to end for control, telemetry, and video.
+5. The repository root is in the right place; the next cleanup is config ownership and runtime hardening, not repo restructuring.
 
 ## Recommended Next Steps
 
-1. Add simulator camera frame publishing to `mqtt.camera_topic`.
-2. Add Redis-backed GCS state before multi-user deployment.
-3. Add a production media path (`webrtc_sfu`) after MQTT-frame bootstrap is validated.
+1. Verify broker reconnect, freshness, and stale-frame behavior under disconnect/reconnect conditions.
+2. Add Redis-backed GCS state before multi-user or multi-instance deployment.
+3. Add a production media path (`webrtc_sfu` or equivalent) after the MQTT-frame bootstrap is validated.
 4. Later split shared config into more explicit domains if the single common file becomes too broad.

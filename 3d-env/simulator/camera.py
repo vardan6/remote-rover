@@ -84,7 +84,7 @@ class CameraController:
         self._pov_cam_np = base.render.attachNewNode(pov_cam_node)
         dr = self._pov_buffer.makeDisplayRegion()
         dr.setCamera(self._pov_cam_np)
-        self._pov_buffer.setActive(False)
+        self._pov_buffer.setActive(True)
 
     def _setup_mouse_events(self):
         base = self._base
@@ -138,8 +138,6 @@ class CameraController:
     # ------------------------------------------------------------------
     def toggle(self):
         self._pov_active = not self._pov_active
-        if self._pov_buffer:
-            self._pov_buffer.setActive(self._pov_active)
 
     @property
     def pov_active(self):
@@ -152,14 +150,15 @@ class CameraController:
         rover    = self._rover
         pos      = rover.pos
         rover_np = rover.chassis_np
+        forward = rover_np.getQuat(self._base.render).xform(Vec3(0, 1, 0))
+        up = Vec3(0, 0, 1)
+        cam_pos = pos + forward * POV_FORWARD_OFFSET + up * POV_HEIGHT_OFFSET
+
+        if self._pov_cam_np:
+            self._pov_cam_np.setPos(cam_pos)
+            self._pov_cam_np.setHpr(rover_np.getHpr(self._base.render))
 
         if self._pov_active:
-            forward = rover_np.getQuat(self._base.render).xform(Vec3(0, 1, 0))
-            up      = Vec3(0, 0, 1)
-            cam_pos = pos + forward * POV_FORWARD_OFFSET + up * POV_HEIGHT_OFFSET
-            if self._pov_cam_np:
-                self._pov_cam_np.setPos(cam_pos)
-                self._pov_cam_np.setHpr(rover_np.getHpr(self._base.render))
             self._base.camera.setPos(cam_pos)
             self._base.camera.setHpr(rover_np.getHpr(self._base.render))
         else:

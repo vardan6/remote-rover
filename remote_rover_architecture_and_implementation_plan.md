@@ -2,7 +2,7 @@
 
 ## Current Architecture
 
-The project is currently split into two applications under the `remote-rover/` workspace:
+The project is split into two applications under the `remote-rover/` workspace:
 
 ```text
 remote-rover/
@@ -11,8 +11,8 @@ remote-rover/
     requirements.txt
   gcs_server/
     app.py
+    requirements-gcs.txt
     static/
-  requirements-gcs.txt
 ```
 
 ### 1. Simulator
@@ -27,6 +27,7 @@ Responsibilities:
 - telemetry collection
 - MQTT control subscription
 - MQTT telemetry publication
+- MQTT camera-frame publication from the POV buffer
 
 ### 2. Ground Control Station
 
@@ -40,6 +41,8 @@ Responsibilities:
 - active-controller lock
 - broker status reporting
 - video ingest/delivery mode selection
+- MQTT setup/config UI with live broker runtime reconfiguration
+- browser appearance theme preferences
 
 ### 3. Shared Runtime Contract
 
@@ -62,24 +65,27 @@ Default values:
 
 Implemented now:
 - simulator MQTT control + telemetry bridge
+- simulator MQTT camera-frame publishing
 - GCS web app split out of the simulator tree
 - browser controller locking
 - shared `camera_topic` config key
 - `video.ingest_mode` and `video.delivery_mode` config keys
 - separate dependency files for simulator and GCS
+- browser-accessible MQTT config update API and setup page
+- live GCS MQTT reconnect after config save
 
 Not implemented yet:
-- simulator camera frame publishing
 - WebRTC delivery
 - Redis-backed distributed GCS state
 - auth/session security
+- non-local config/secret management beyond `common.local.json`
 
 ## Recommended Execution Order
 
-### Phase A: Finish the bootstrap path
-- add simulator camera frame publishing to MQTT
-- confirm end-to-end browser video rendering in the GCS
+### Phase A: Harden the bootstrap path
+- verify end-to-end browser video rendering in the GCS under real broker conditions
 - verify topic freshness behavior under disconnect/reconnect conditions
+- decide whether MQTT-frame video remains a debug/fallback mode only
 
 ### Phase B: Harden shared configuration
 - keep shared runtime config in `config/`
@@ -97,13 +103,8 @@ Not implemented yet:
 
 ## Structural Conclusion
 
-The repository root is now correctly placed at `remote-rover/`.
-
-That resolves the earlier tracking problem between:
-- `3d-env/`
-- `gcs_server/`
-- root-level project documentation
+The repository root is correctly placed at `remote-rover/`.
 
 The remaining structural improvement is not repo layout, but config ownership:
 - simulator-specific settings should stay in `3d-env/`
-- eventually shared MQTT/GCS config should move to a root-level shared config source
+- shared MQTT/GCS config should stay in `config/`, but may later be split into clearer domains

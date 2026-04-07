@@ -62,7 +62,8 @@ Implemented in the original simulator phase:
 Added after Phase 1:
 - MQTT control subscription
 - MQTT telemetry publication
-- shared GCS-related config keys in `simulator/settings.json`
+- MQTT camera-frame publication from the POV camera buffer
+- shared GCS-related config keys in the current runtime config model
 
 ## Notes
 
