@@ -64,6 +64,13 @@ Added after Phase 1:
 - MQTT telemetry publication
 - MQTT camera-frame publication from the POV camera buffer
 - shared GCS-related config keys in the current runtime config model
+- major 3D world redesign (April 8, 2026):
+  - terrain expanded from `200 x 200` to `400 x 400`
+  - terrain detail density preserved with higher grid resolution (`160 -> 320`)
+  - deterministic hills/valleys, including two valley sites with dedicated solar plants
+  - central operations building between both solar sites
+  - flattened rover pathways around each plant and connecting all key locations
+  - enlarged trees and mixed-size stone distribution with keepout around roads/facilities
 
 ## Notes
 

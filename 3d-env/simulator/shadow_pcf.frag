@@ -36,8 +36,9 @@ const vec2 disk[8] = vec2[](
 // ------------------------------------------------------------
 // PCF shadow sampling
 //   blurRadius — spread of the Poisson disk in texture space.
-//   At 1024×1024 / 160 world-unit film → 1 texel ≈ 0.000977 UV.
-//   0.0015 ≈ ~1.5-texel radius → soft penumbra without banding.
+//   Blur radius is expressed in shadow-map UV space.
+//   Keep it small enough to avoid a smeared look, but wide enough to break up
+//   visible texel structure on large, flat terrain patches.
 // ------------------------------------------------------------
 float sampleShadow(vec4 coord, float blurRadius, float depthBias) {
     // Behind light / invalid projection: don't darken.
@@ -66,7 +67,7 @@ float sampleShadow(vec4 coord, float blurRadius, float depthBias) {
     // Fade to fully lit near map edges so the moving shadow-camera window
     // never appears as a visible dark rectangle on terrain.
     float edge = min(min(sc.x, 1.0 - sc.x), min(sc.y, 1.0 - sc.y));
-    float edgeFade = smoothstep(0.0, 0.045, edge);
+    float edgeFade = smoothstep(0.0, 0.12, edge);
     return mix(1.0, shadow, edgeFade);
 }
 
@@ -74,8 +75,8 @@ void main() {
     vec3  N        = normalize(vNormal);
     vec3  L        = normalize(p3d_LightSource[0].position.xyz); // toward sun, view-space
     float diff     = max(dot(N, L), 0.0);
-    float bias     = max(0.0007, 0.0022 * (1.0 - diff));
-    float shadow   = sampleShadow(vShadowCoord, 0.0012, bias);
+    float bias     = max(0.0015, 0.0035 * (1.0 - diff));
+    float shadow   = sampleShadow(vShadowCoord, 0.0015, bias);
 
     vec4 ambient   = p3d_LightModel.ambient              * vColor;
     vec4 diffuse   = p3d_LightSource[0].diffuse * diff * shadow * vColor;

@@ -139,13 +139,14 @@ def _build_body_node():
         (-hw, -hl, -hh), (hw, -hl, -hh), (hw, hl, -hh), (-hw, hl, -hh),
         (-hw, -hl,  hh), (hw, -hl,  hh), (hw, hl,  hh), (-hw, hl,  hh),
     ]
+    # Warm orange-red palette with subtle face variation so lighting still reads shape.
     faces = [
-        ((0, 1, 2, 3), LColor(0.80, 0.20, 0.10, 1), ( 0,  0, -1)),  # bottom
-        ((4, 7, 6, 5), LColor(0.80, 0.20, 0.10, 1), ( 0,  0,  1)),  # top
-        ((0, 4, 5, 1), LColor(0.90, 0.30, 0.05, 1), ( 0, -1,  0)),  # front (brighter)
-        ((1, 5, 6, 2), LColor(0.60, 0.15, 0.05, 1), ( 1,  0,  0)),  # right
-        ((2, 6, 7, 3), LColor(0.55, 0.13, 0.04, 1), ( 0,  1,  0)),  # back
-        ((3, 7, 4, 0), LColor(0.60, 0.15, 0.05, 1), (-1,  0,  0)),  # left
+        ((0, 1, 2, 3), LColor(0.78, 0.24, 0.08, 1), ( 0,  0, -1)),  # bottom
+        ((4, 7, 6, 5), LColor(0.88, 0.30, 0.08, 1), ( 0,  0,  1)),  # top
+        ((0, 4, 5, 1), LColor(0.96, 0.36, 0.09, 1), ( 0, -1,  0)),  # front (brightest)
+        ((1, 5, 6, 2), LColor(0.82, 0.25, 0.08, 1), ( 1,  0,  0)),  # right
+        ((2, 6, 7, 3), LColor(0.76, 0.22, 0.07, 1), ( 0,  1,  0)),  # back
+        ((3, 7, 4, 0), LColor(0.82, 0.25, 0.08, 1), (-1,  0,  0)),  # left
     ]
     fmt   = GeomVertexFormat.get_v3n3c4()
     vdata = GeomVertexData("rover_body", fmt, Geom.UHStatic)
@@ -243,6 +244,7 @@ class Rover:
         body_np = self.chassis_np.attachNewNode(_build_body_node())
         body_np.setZ(BODY_VISUAL_Z_OFFSET)
         body_np.setTwoSided(True)
+        body_np.setTransparency(False)
 
         # ── BulletVehicle (raycast suspension) ────────────────────────────────
         self.vehicle = BulletVehicle(bullet_world, chassis_node)
@@ -254,7 +256,6 @@ class Rover:
         for i, (conn_pt, is_front) in enumerate(WHEEL_SETUPS):
             # Visual wheel node (world-parented so physics can set its transform)
             wn = render.attachNewNode(_build_wheel_node(f"wheel_{i}"))
-            wn.setTwoSided(True)
             self._wheel_nps.append(wn)
 
             wheel = self.vehicle.createWheel()

@@ -33,15 +33,16 @@ load_prc_file_data("", "\n".join(_prc))
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     Vec3, Point3, AmbientLight, DirectionalLight, LColor,
-    WindowProperties, CardMaker, BitMask32, Texture, Shader, PNMImage, StringStream
+    WindowProperties, CardMaker, BitMask32, Texture, Shader, PNMImage, StringStream,
+    DepthOffsetAttrib
 )
-from panda3d.bullet import BulletWorld, BulletRigidBodyNode, BulletSphereShape
+from panda3d.bullet import BulletWorld, BulletRigidBodyNode, BulletSphereShape, BulletBoxShape
 from panda3d.core import (GeomNode, Geom, GeomTriangles, GeomVertexData,
                           GeomVertexFormat, GeomVertexWriter)
 import math
 import random
 
-from terrain import Terrain, TERRAIN_SIZE
+from terrain import Terrain, TERRAIN_SIZE, SCENE_LAYOUT, ROAD_SEGMENTS
 from rover import Rover
 from camera import CameraController
 from gui import TelemetryGUI, MenuBar, StatusBar, apply_imgui_theme
@@ -114,6 +115,42 @@ def _build_rock_node(name, rx, ry, rz, seed, base_col=(0.44, 0.40, 0.35), jitter
     return gn
 
 
+def _build_box_node(name, hx, hy, hz, color):
+    """Create a simple box mesh centered at origin."""
+    fmt = GeomVertexFormat.get_v3n3c4()
+    vdata = GeomVertexData(name, fmt, Geom.UHStatic)
+    vw = GeomVertexWriter(vdata, "vertex")
+    nw = GeomVertexWriter(vdata, "normal")
+    cw = GeomVertexWriter(vdata, "color")
+
+    # Each face uses 4 dedicated vertices so normals stay crisp.
+    faces = [
+        ((0, 0, 1), [(-hx, -hy, hz), (hx, -hy, hz), (hx, hy, hz), (-hx, hy, hz)]),
+        ((0, 0, -1), [(-hx, hy, -hz), (hx, hy, -hz), (hx, -hy, -hz), (-hx, -hy, -hz)]),
+        ((1, 0, 0), [(hx, -hy, -hz), (hx, hy, -hz), (hx, hy, hz), (hx, -hy, hz)]),
+        ((-1, 0, 0), [(-hx, hy, -hz), (-hx, -hy, -hz), (-hx, -hy, hz), (-hx, hy, hz)]),
+        ((0, 1, 0), [(-hx, hy, -hz), (hx, hy, -hz), (hx, hy, hz), (-hx, hy, hz)]),
+        ((0, -1, 0), [(hx, -hy, -hz), (-hx, -hy, -hz), (-hx, -hy, hz), (hx, -hy, hz)]),
+    ]
+
+    tris = GeomTriangles(Geom.UHStatic)
+    base_idx = 0
+    for normal, verts in faces:
+        for x, y, z in verts:
+            vw.addData3(x, y, z)
+            nw.addData3(*normal)
+            cw.addData4(color[0], color[1], color[2], 1.0)
+        tris.addVertices(base_idx, base_idx + 1, base_idx + 2)
+        tris.addVertices(base_idx, base_idx + 2, base_idx + 3)
+        base_idx += 4
+
+    geom = Geom(vdata)
+    geom.addPrimitive(tris)
+    node = GeomNode(name)
+    node.addGeom(geom)
+    return node
+
+
 # ── Simulator ─────────────────────────────────────────────────────────────────
 class RoverSimulator(ShowBase):
     def __init__(self):
@@ -170,6 +207,7 @@ class RoverSimulator(ShowBase):
         props.setTitle("Remote Rover Simulator")
         props.setSize(1280, 720)
         self.win.requestProperties(props)
+        self.setBackgroundColor(0.60, 0.73, 0.90, 1.0)
 
     # Visual sun position — fixed in the sky for the glowing disc
     SUN_POS    = Point3(-70, -90, 130)
@@ -184,34 +222,137 @@ class RoverSimulator(ShowBase):
         sun.setColor(LColor(1.05, 0.98, 0.85, 1))
         if not self._software_mode:
             sun.setShadowCaster(True, 2048, 2048)
-            sun.getLens().setFilmSize(30, 30)
-            sun.getLens().setNearFar(20, 180)
+            # Keep the shadow camera window comfortably larger than the rover's
+            # working area so the moving shadow-map footprint does not show up
+            # as a dark rectangle on the terrain around it.
+            sun.getLens().setFilmSize(72, 72)
+            sun.getLens().setNearFar(10, 240)
 
         self._sun_np = self.render.attachNewNode(sun)
         self._sun_np.setPos(self._SUN_OFFSET)
         self._sun_np.lookAt(Point3(0, 0, 0))
+        light_node = self._sun_np.node()
+        get_initial_state = getattr(light_node, "getInitialState", None)
+        set_initial_state = getattr(light_node, "setInitialState", None)
+        if callable(get_initial_state) and callable(set_initial_state):
+            shadow_state = get_initial_state()
+            shadow_state = shadow_state.setAttrib(DepthOffsetAttrib.make(-3))
+            set_initial_state(shadow_state)
         self.render.setLight(self._sun_np)
 
+        self._setup_sky()
         self._add_sun_disc(self.SUN_POS)
         self.render.setShaderAuto()
+
+    def _build_sky_texture(self):
+        w, h = 1024, 512
+        img = PNMImage(w, h, 3)
+
+        horizon = (0.95, 0.80, 0.58)
+        mid = (0.45, 0.66, 0.90)
+        zenith = (0.12, 0.31, 0.62)
+
+        for y in range(h):
+            v = y / (h - 1)
+            if v < 0.34:
+                t = v / 0.34
+                base_r = horizon[0] * (1.0 - t) + mid[0] * t
+                base_g = horizon[1] * (1.0 - t) + mid[1] * t
+                base_b = horizon[2] * (1.0 - t) + mid[2] * t
+            else:
+                t = (v - 0.34) / 0.66
+                base_r = mid[0] * (1.0 - t) + zenith[0] * t
+                base_g = mid[1] * (1.0 - t) + zenith[1] * t
+                base_b = mid[2] * (1.0 - t) + zenith[2] * t
+
+            haze = max(0.0, 1.0 - abs(v - 0.24) / 0.26)
+            base_r = min(1.0, base_r + haze * 0.06)
+            base_g = min(1.0, base_g + haze * 0.04)
+            base_b = min(1.0, base_b + haze * 0.02)
+
+            for x in range(w):
+                u = x / (w - 1)
+                n = (
+                    math.sin(u * 22.0 + v * 9.0 + 0.8) * 0.52
+                    + math.sin(u * 53.0 - v * 17.0 + 1.3) * 0.33
+                    + math.cos(u * 81.0 + v * 29.0 - 0.7) * 0.15
+                )
+                n = n / 1.85
+                cloud = max(0.0, min(1.0, (n * 0.5 + 0.5) - (0.48 + 0.34 * v)))
+                cloud_alpha = cloud * (0.14 + 0.24 * max(0.0, 1.0 - v))
+
+                r = base_r * (1.0 - cloud_alpha) + 0.96 * cloud_alpha
+                g = base_g * (1.0 - cloud_alpha) + 0.97 * cloud_alpha
+                b = base_b * (1.0 - cloud_alpha) + 0.98 * cloud_alpha
+                img.setXel(x, y, r, g, b)
+
+        tex = Texture("sky_gradient_clouds")
+        tex.load(img)
+        tex.setWrapU(Texture.WMRepeat)
+        tex.setWrapV(Texture.WMClamp)
+        tex.setMinfilter(Texture.FTLinearMipmapLinear)
+        tex.setMagfilter(Texture.FTLinear)
+        return tex
+
+    def _setup_sky(self):
+        main_mask = self.cam.node().getCameraMask()
+        self._sky_np = self.loader.loadModel("models/misc/sphere")
+        self._sky_np.reparentTo(self.render)
+        self._sky_np.setScale(950.0)
+        self._sky_np.setTwoSided(True)
+        self._sky_np.setLightOff()
+        self._sky_np.setShaderOff()
+        self._sky_np.setDepthWrite(False)
+        self._sky_np.setDepthTest(False)
+        self._sky_np.setBin("background", 0)
+        self._sky_np.hide(BitMask32.allOn())
+        self._sky_np.show(main_mask)
+        self._sky_np.setTexture(self._build_sky_texture(), 1)
 
     def _add_sun_disc(self, pos):
         main_mask = self.cam.node().getCameraMask()
         cm = CardMaker("sun_disc")
         cm.setFrame(-1, 1, -1, 1)
 
-        disc = self.render.attachNewNode(cm.generate())
-        disc.setPos(pos); disc.setBillboardPointEye(); disc.setScale(6)
-        disc.setColor(1.0, 0.97, 0.75, 1)
-        disc.setLightOff(); disc.setShaderOff(); disc.setDepthWrite(False)
-        disc.hide(BitMask32.allOn()); disc.show(main_mask)
+        layers = [
+            (6.2, (1.0, 0.98, 0.84, 1.0)),
+            (9.0, (1.0, 0.90, 0.60, 0.34)),
+            (14.0, (1.0, 0.78, 0.42, 0.20)),
+            (21.0, (1.0, 0.70, 0.36, 0.10)),
+        ]
+        self._sun_sprites = []
+        for idx, (scale, color) in enumerate(layers):
+            sp = self.render.attachNewNode(cm.generate())
+            sp.setName(f"sun_layer_{idx}")
+            sp.setPos(pos)
+            sp.setBillboardPointEye()
+            sp.setScale(scale)
+            sp.setColor(*color)
+            sp.setLightOff()
+            sp.setShaderOff()
+            sp.setDepthWrite(False)
+            sp.setDepthTest(True)
+            sp.setTransparency(True)
+            sp.setBin("background", 1)
+            sp.hide(BitMask32.allOn())
+            sp.show(main_mask)
+            self._sun_sprites.append(sp)
 
-        glow = self.render.attachNewNode(cm.generate())
-        glow.setPos(pos); glow.setBillboardPointEye(); glow.setScale(14)
-        glow.setColor(1.0, 0.90, 0.50, 0.18)
-        glow.setLightOff(); glow.setShaderOff(); glow.setDepthWrite(False)
-        glow.setTransparency(True)
-        glow.hide(BitMask32.allOn()); glow.show(main_mask)
+        # Subtle horizontal glare band.
+        glare = self.render.attachNewNode(cm.generate())
+        glare.setPos(pos)
+        glare.setBillboardPointEye()
+        glare.setScale(28.0, 1.0, 3.2)
+        glare.setColor(1.0, 0.82, 0.47, 0.10)
+        glare.setLightOff()
+        glare.setShaderOff()
+        glare.setDepthWrite(False)
+        glare.setDepthTest(True)
+        glare.setTransparency(True)
+        glare.setBin("background", 1)
+        glare.hide(BitMask32.allOn())
+        glare.show(main_mask)
+        self._sun_sprites.append(glare)
 
     def _setup_physics(self):
         self.bullet_world = BulletWorld()
@@ -224,13 +365,19 @@ class RoverSimulator(ShowBase):
         self.terrain.np.hide(BitMask32.allOn())
         self.terrain.np.show(main_mask)
 
-        # Spawn high enough to let the suspension settle onto the terrain
-        self.rover = Rover(self.render, self.bullet_world, start_pos=(0, 0, 4))
+        spawn_x, spawn_y = SCENE_LAYOUT["spawn"]["xy"]
+        self._spawn_point = (spawn_x, spawn_y, self.terrain.height_at(spawn_x, spawn_y) + 4.0)
+        self.rover = Rover(self.render, self.bullet_world, start_pos=self._spawn_point)
 
-        # Obstacles and decor
+        self._solar_nps = []
+        self._building_nps = []
         self._stone_nps = []
         self._tree_nps = []
         self._obstacle_footprints = []
+
+        self._register_road_keepout()
+        self._create_solar_plants(main_mask)
+        self._create_operations_building(main_mask)
         self._create_stones(main_mask)
         self._create_trees(main_mask)
 
@@ -245,43 +392,172 @@ class RoverSimulator(ShowBase):
                 sn.setShader(pcf)
             for tn in self._tree_nps:
                 tn.setShader(pcf)
+            for pn in self._solar_nps:
+                pn.setShader(pcf)
+            for bn in self._building_nps:
+                bn.setShader(pcf)
 
         self._flip_timer   = 0.0
 
         self.cam_ctrl = CameraController(self, self.rover)
         self.gui      = TelemetryGUI()
 
+    def _register_keepout(self, x, y, radius):
+        self._obstacle_footprints.append((x, y, radius))
+
+    def _register_road_keepout(self):
+        road_w = SCENE_LAYOUT["roads"]["width"] + 1.5
+        step = max(4.0, road_w * 0.85)
+        for (p0, p1, _z0, _z1) in ROAD_SEGMENTS:
+            dx = p1[0] - p0[0]
+            dy = p1[1] - p0[1]
+            seg_len = math.sqrt(dx * dx + dy * dy)
+            samples = max(2, int(seg_len / step))
+            for i in range(samples + 1):
+                t = i / samples
+                sx = p0[0] + dx * t
+                sy = p0[1] + dy * t
+                self._register_keepout(sx, sy, road_w)
+
+        for key in ("plant_a", "plant_b", "building"):
+            spec = SCENE_LAYOUT[key]
+            hx, hy = spec["pad_half_extents"]
+            self._register_keepout(spec["center"][0], spec["center"][1], math.sqrt(hx * hx + hy * hy) + 3.0)
+
+    def _add_static_box_collider(self, name, x, y, z, hx, hy, hz):
+        body = BulletRigidBodyNode(name)
+        body.addShape(BulletBoxShape(Vec3(hx, hy, hz)))
+        body.setMass(0.0)
+        body_np = self.render.attachNewNode(body)
+        body_np.setPos(x, y, z)
+        self.bullet_world.attachRigidBody(body)
+        return body_np
+
+    def _create_solar_plants(self, main_mask):
+        for idx, key in enumerate(("plant_a", "plant_b")):
+            spec = SCENE_LAYOUT[key]
+            cx, cy = spec["center"]
+            hx, hy = spec["pad_half_extents"]
+            floor_z = spec["floor_z"]
+
+            pad = self.render.attachNewNode(_build_box_node(f"{key}_pad", hx, hy, 0.18, (0.28, 0.29, 0.30)))
+            pad.setPos(cx, cy, floor_z + 0.18)
+            pad.setTwoSided(True)
+            pad.hide(BitMask32.allOn())
+            pad.show(main_mask)
+            self._solar_nps.append(pad)
+
+            rows = 8
+            cols = 8
+            sx = (hx * 1.70) / (cols - 1)
+            sy = (hy * 1.60) / (rows - 1)
+            heading = 20 if idx == 0 else -18
+
+            for r in range(rows):
+                for c in range(cols):
+                    px = cx - hx * 0.85 + c * sx
+                    py = cy - hy * 0.80 + r * sy
+                    pz = self.terrain.height_at(px, py) + 0.86
+
+                    frame_gn = _build_box_node(f"{key}_frame_{r}_{c}", 1.35, 0.08, 0.34, (0.60, 0.62, 0.65))
+                    frame_np = self.render.attachNewNode(frame_gn)
+                    frame_np.setPos(px, py, pz)
+                    frame_np.setHpr(heading, 0, 0)
+                    frame_np.setTwoSided(True)
+                    frame_np.hide(BitMask32.allOn())
+                    frame_np.show(main_mask)
+
+                    panel_gn = _build_box_node(f"{key}_panel_{r}_{c}", 1.35, 0.95, 0.035, (0.08, 0.14, 0.24))
+                    panel_np = self.render.attachNewNode(panel_gn)
+                    panel_np.setPos(px, py, pz + 0.42)
+                    panel_np.setHpr(heading, 22, 0)
+                    panel_np.setTwoSided(True)
+                    panel_np.hide(BitMask32.allOn())
+                    panel_np.show(main_mask)
+                    self._solar_nps.extend((frame_np, panel_np))
+
+            collider_np = self._add_static_box_collider(
+                f"{key}_collider",
+                cx,
+                cy,
+                floor_z + 1.2,
+                hx * 0.98,
+                hy * 0.98,
+                1.2,
+            )
+            self._solar_nps.append(collider_np)
+
+    def _create_operations_building(self, main_mask):
+        spec = SCENE_LAYOUT["building"]
+        cx, cy = spec["center"]
+        hx, hy = spec["pad_half_extents"]
+        floor_z = spec["floor_z"]
+
+        pad = self.render.attachNewNode(_build_box_node("building_pad", hx, hy, 0.24, (0.38, 0.37, 0.34)))
+        pad.setPos(cx, cy, floor_z + 0.24)
+        pad.setTwoSided(True)
+        pad.hide(BitMask32.allOn())
+        pad.show(main_mask)
+        self._building_nps.append(pad)
+
+        base = self.render.attachNewNode(_build_box_node("ops_building_base", 8.0, 5.5, 2.8, (0.74, 0.74, 0.70)))
+        base.setPos(cx, cy, floor_z + 2.8)
+        base.setTwoSided(True)
+        base.hide(BitMask32.allOn())
+        base.show(main_mask)
+        self._building_nps.append(base)
+
+        roof = self.render.attachNewNode(_build_box_node("ops_building_roof", 8.5, 6.0, 0.26, (0.22, 0.23, 0.24)))
+        roof.setPos(cx, cy, floor_z + 5.9)
+        roof.setTwoSided(True)
+        roof.hide(BitMask32.allOn())
+        roof.show(main_mask)
+        self._building_nps.append(roof)
+
+        collider_np = self._add_static_box_collider(
+            "ops_building_collider",
+            cx,
+            cy,
+            floor_z + 2.9,
+            8.2,
+            5.8,
+            2.9,
+        )
+        self._building_nps.append(collider_np)
+
     # ── Stone obstacle creation ───────────────────────────────────────────────
     def _create_stones(self, main_mask):
         rng = random.Random(42)
-        small_stones  = 18
-        big_boulders  = 6
+        small_stones  = 42
+        big_boulders  = 18
         total_stones  = small_stones + big_boulders
         placed = 0
         attempts = 0
 
         spawn_half_extent = TERRAIN_SIZE * 0.46
-        spawn_clear_radius = 12.0
+        spawn_clear_radius = 18.0
 
-        while placed < total_stones and attempts < 800:
+        while placed < total_stones and attempts < 2600:
             attempts += 1
             # Random position on terrain, keep a clear zone around rover start
             px = rng.uniform(-spawn_half_extent, spawn_half_extent)
             py = rng.uniform(-spawn_half_extent, spawn_half_extent)
-            if math.sqrt(px * px + py * py) < spawn_clear_radius:
+            dxs = px - self._spawn_point[0]
+            dys = py - self._spawn_point[1]
+            if math.sqrt(dxs * dxs + dys * dys) < spawn_clear_radius:
                 continue
 
             is_big = placed >= small_stones
             if is_big:
-                radius = rng.uniform(0.90, 1.55)
-                rx = radius * rng.uniform(0.90, 1.45)
-                ry = radius * rng.uniform(0.90, 1.45)
-                rz = radius * rng.uniform(0.65, 1.05)
+                radius = rng.uniform(1.15, 2.20)
+                rx = radius * rng.uniform(0.95, 1.55)
+                ry = radius * rng.uniform(0.95, 1.55)
+                rz = radius * rng.uniform(0.70, 1.20)
             else:
-                radius = rng.uniform(0.30, 0.72)
-                rx = radius * rng.uniform(0.80, 1.30)
-                ry = radius * rng.uniform(0.80, 1.30)
-                rz = radius * rng.uniform(0.55, 0.90)
+                radius = rng.uniform(0.45, 1.20)
+                rx = radius * rng.uniform(0.80, 1.45)
+                ry = radius * rng.uniform(0.80, 1.45)
+                rz = radius * rng.uniform(0.60, 1.05)
 
             # Keep obstacles from intersecting each other too heavily.
             footprint_radius = max(radius, rx, ry) * (1.18 if is_big else 1.05)
@@ -332,23 +608,25 @@ class RoverSimulator(ShowBase):
     # ── Tree decoration ────────────────────────────────────────────────────────
     def _create_trees(self, main_mask):
         rng = random.Random(314)
-        num_trees = 14
+        num_trees = 28
         placed = 0
         attempts = 0
 
         spawn_half_extent = TERRAIN_SIZE * 0.47
-        spawn_clear_radius = 14.0
+        spawn_clear_radius = 20.0
 
-        while placed < num_trees and attempts < 900:
+        while placed < num_trees and attempts < 2400:
             attempts += 1
             px = rng.uniform(-spawn_half_extent, spawn_half_extent)
             py = rng.uniform(-spawn_half_extent, spawn_half_extent)
-            if math.sqrt(px * px + py * py) < spawn_clear_radius:
+            dxs = px - self._spawn_point[0]
+            dys = py - self._spawn_point[1]
+            if math.sqrt(dxs * dxs + dys * dys) < spawn_clear_radius:
                 continue
 
-            trunk_r = rng.uniform(0.16, 0.26)
-            trunk_h = rng.uniform(1.1, 1.9)
-            canopy_r = rng.uniform(0.85, 1.65)
+            trunk_r = rng.uniform(0.24, 0.40)
+            trunk_h = rng.uniform(1.9, 3.4)
+            canopy_r = rng.uniform(1.25, 2.65)
             footprint_radius = max(trunk_r * 1.6, canopy_r * 0.55)
 
             if not self._is_obstacle_clear(px, py, footprint_radius):
@@ -409,7 +687,7 @@ class RoverSimulator(ShowBase):
     def _reset_rover(self):
         """Teleport rover back to spawn with zeroed velocity (called after flip)."""
         cn = self.rover.chassis_np.node()
-        self.rover.chassis_np.setPos(0, 0, 4)
+        self.rover.chassis_np.setPos(*self._spawn_point)
         self.rover.chassis_np.setHpr(0, 0, 0)
         cn.setLinearVelocity(Vec3(0, 0, 0))
         cn.setAngularVelocity(Vec3(0, 0, 0))
@@ -833,6 +1111,10 @@ class RoverSimulator(ShowBase):
                                        rp.y + self._SUN_OFFSET.y,
                                        rp.z + self._SUN_OFFSET.z))
             self._sun_np.lookAt(Point3(rp.x, rp.y, rp.z))
+        cam_pos = self.camera.getPos(self.render)
+        self._sky_np.setPos(cam_pos)
+        for sp in self._sun_sprites:
+            sp.setPos(cam_pos + self.SUN_POS)
         self.cam_ctrl.update()
         state_payload = self._collect_state_payload()
         self._publish_state_if_due(now_mono, state_payload)
