@@ -1,6 +1,7 @@
 # Phase 1 — 3D Rover Simulator
 
 > Historical Phase 1 snapshot.
+> For the current documentation set, start with `../docs/README.md`.
 > For current MQTT behavior and Phase 2 contracts, use `mqtt-plan-canonical-2026-04-05_00-58-36.md`.
 > For current workspace structure, use `../README.md` and `../remote_rover_architecture_and_implementation_plan.md`.
 
@@ -26,13 +27,16 @@ MQTT functionality was added after this phase.
 
 ```bash
 cd /mnt/c/Users/vardana/Documents/Proj/remote-rover/3d-env
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python simulator/main.py
 ```
 
 Optional GPU helpers:
-- `run.bat`
-- `run_gpu.sh`
+- `run.sh` is the Linux / WSL launcher and prefers NVIDIA first when available
+- `run.bat` uses the Windows `.venv-gpu` environment
+- `run_gpu.sh` bridges from WSL into the Windows `.venv-gpu` environment when WSL interop is enabled
 
 ## Main Simulator Modules
 

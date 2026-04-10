@@ -32,6 +32,7 @@ class MQTTBridge:
         self._status = "disabled"
         self._latest_control = None
         self._latest_rx_mono = 0.0
+        self._gcs_presence: dict[str, dict[str, float | bool]] = {}
 
     def start(self):
         if mqtt is None:
@@ -85,9 +86,12 @@ class MQTTBridge:
                 self._cfg["topic_prefix"],
                 self._cfg["control_topic"],
             )
+            presence_topic = self._presence_topic_filter()
             try:
                 client.subscribe(control_topic, qos=0)
                 print(f"[MQTT] Subscribed: {control_topic}")
+                client.subscribe(presence_topic, qos=0)
+                print(f"[MQTT] Subscribed: {presence_topic}")
             except Exception as exc:
                 self._status = f"subscribe error ({exc})"
                 print(f"[MQTT] Subscribe failed: {exc}")
@@ -100,6 +104,17 @@ class MQTTBridge:
         self._status = "reconnecting" if rc != 0 else "disconnected"
 
     def _on_message(self, _client, _userdata, msg):
+        control_topic = _topic_join(
+            self._cfg["topic_prefix"],
+            self._cfg["control_topic"],
+        )
+        if msg.topic == control_topic:
+            self._handle_control_message(msg)
+            return
+        if self._is_presence_topic(msg.topic):
+            self._handle_presence_message(msg)
+
+    def _handle_control_message(self, msg):
         try:
             payload = msg.payload.decode("utf-8", errors="replace")
             frame = json.loads(payload)
@@ -111,6 +126,30 @@ class MQTTBridge:
         with self._lock:
             self._latest_control = frame
             self._latest_rx_mono = time.monotonic()
+
+    def _handle_presence_message(self, msg):
+        try:
+            payload = msg.payload.decode("utf-8", errors="replace")
+            frame = json.loads(payload)
+            if not isinstance(frame, dict):
+                return
+        except Exception:
+            return
+
+        gcs_id = str(frame.get("gcs_id") or self._presence_topic_suffix(msg.topic)).strip()
+        if not gcs_id:
+            return
+        active = bool(frame.get("active", True))
+        try:
+            timestamp = float(frame.get("timestamp", 0.0))
+        except Exception:
+            timestamp = 0.0
+
+        with self._lock:
+            self._gcs_presence[gcs_id] = {
+                "active": active,
+                "timestamp": timestamp,
+            }
 
     def get_control_frame(self, timeout_s: float):
         now = time.monotonic()
@@ -148,3 +187,45 @@ class MQTTBridge:
             self._client.publish(topic, payload=frame_bytes, qos=0, retain=False)
         except Exception:
             pass
+
+    def has_active_gcs(self, timeout_s: float) -> bool:
+        return self.active_gcs_count(timeout_s) > 0
+
+    def active_gcs_count(self, timeout_s: float) -> int:
+        now = time.time()
+        timeout_s = max(0.0, float(timeout_s))
+        active_count = 0
+        with self._lock:
+            entries = list(self._gcs_presence.values())
+        for entry in entries:
+            if not bool(entry.get("active")):
+                continue
+            timestamp = float(entry.get("timestamp", 0.0) or 0.0)
+            if timestamp <= 0.0:
+                continue
+            if now - timestamp <= timeout_s:
+                active_count += 1
+        return active_count
+
+    def _presence_topic_filter(self) -> str:
+        base = _topic_join(
+            self._cfg.get("topic_prefix", ""),
+            self._cfg.get("gcs_presence_topic", "gcs/presence"),
+        ).rstrip("/")
+        return f"{base}/+"
+
+    def _presence_topic_base(self) -> str:
+        return _topic_join(
+            self._cfg.get("topic_prefix", ""),
+            self._cfg.get("gcs_presence_topic", "gcs/presence"),
+        ).rstrip("/")
+
+    def _is_presence_topic(self, topic: str) -> bool:
+        base = self._presence_topic_base()
+        return bool(base) and topic.startswith(f"{base}/")
+
+    def _presence_topic_suffix(self, topic: str) -> str:
+        base = self._presence_topic_base()
+        if not base or not topic.startswith(f"{base}/"):
+            return ""
+        return topic[len(base) + 1 :].strip("/")

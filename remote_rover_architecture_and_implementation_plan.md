@@ -1,5 +1,12 @@
 # Remote Rover — Current Architecture And Implementation Plan
 
+> Historical architecture note.
+> For the current documentation set, use:
+> - `docs/README.md`
+> - `docs/architecture.md`
+> - `docs/current-state.md`
+> - `docs/implementation-roadmap.md`
+
 ## Current Architecture
 
 The project is split into two applications under the `remote-rover/` workspace:

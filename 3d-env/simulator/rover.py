@@ -18,21 +18,21 @@ WHEEL_WIDTH    = 0.2    # metres — wider tyre gives more grip contact patch (v
 WHEEL_SEGMENTS = 32     # polygon count for wheel cylinder mesh — purely visual detail level
 
 # ── Drive / control ───────────────────────────────────────────────────────────
-CHASSIS_MASS      = 130.0  # kg — heavier = more inertia (resists flipping/flopping) but
+CHASSIS_MASS      = 210.0  # kg — heavier = more inertia (resists flipping/flopping) but
                              #      needs more engine force; also lowers effective suspension
                              #      frequency (softer feel for same spring stiffness)
-MAX_ENGINE_FORCE  = 430.0  # N per wheel (all 4 driven) — total thrust = 4 × this value.
+MAX_ENGINE_FORCE  = 620.0  # N per wheel (all 4 driven) — total thrust = 4 × this value.
                              #      Scale proportionally when changing CHASSIS_MASS so
                              #      acceleration stays roughly constant (a = F/m)
-MAX_BRAKE_FORCE   = 300.0   # N per wheel when coasting with no throttle input.
+MAX_BRAKE_FORCE   = 360.0   # N per wheel when coasting with no throttle input.
                              #      Higher = shorter stopping distance, snappier feel
 MAX_STEER_ANGLE   = 28.0    # degrees — maximum front-wheel steering angle.
                              #      More = tighter turning circle but more oversteer tendency
-ENGINE_FORCE_RESPONSE = 7.0  # 1/s — higher = throttle engages faster.
+ENGINE_FORCE_RESPONSE = 6.0  # 1/s — higher = throttle engages faster.
                                # Smooth force application avoids instant torque spikes
                                # that can pop the front wheels up.
-GROUND_STICK_FORCE_BASE = 550.0   # N — extra downward force to keep tyres planted.
-GROUND_STICK_FORCE_PER_KMH = 22.0 # N/(km/h) — more speed => more downforce.
+GROUND_STICK_FORCE_BASE = 220.0   # N — extra downward force to keep tyres planted.
+GROUND_STICK_FORCE_PER_KMH = 8.0  # N/(km/h) — more speed => more downforce.
 
 # ── Suspension ────────────────────────────────────────────────────────────────
 # Bullet equilibrium formula:  compression_at_rest [m] = g / SUSPENSION_STIFFNESS
@@ -41,46 +41,46 @@ GROUND_STICK_FORCE_PER_KMH = 22.0 # N/(km/h) — more speed => more downforce.
 # → STIFFNESS=60 ≈ 0.16 m rest compression (comfortable mid-travel)
 # Rule of thumb: STIFFNESS > (g / (MAX_TRAVEL_CM/100)) to avoid bottoming out.
 #   For 25 cm travel:  STIFFNESS > 9.81/0.25 = 39.2  →  use 50–80 for headroom.
-SUSPENSION_STIFFNESS        = 70.0   # spring rate — higher = stiffer, chassis tilts less
+SUSPENSION_STIFFNESS        = 52.0   # spring rate — higher = stiffer, chassis tilts less
                                       # on slopes/bumps; lower = softer ride but more flop
                                       # CRITICAL: must satisfy g/stiffness < MAX_TRAVEL/100
                                       # or suspension bottoms out (9.81/70 = 0.14 m < 0.20 m ✓)
-SUSPENSION_DAMPING_RELAX    = 3.5    # damping on spring extension (rebound).
+SUSPENSION_DAMPING_RELAX    = 4.0    # damping on spring extension (rebound).
                                       # Higher = oscillations die faster after a bump.
                                       # Too high = feels like the wheels slam down hard
-SUSPENSION_DAMPING_COMPRESS = 6.0    # damping on spring compression (bump).
+SUSPENSION_DAMPING_COMPRESS = 5.8    # damping on spring compression (bump).
                                       # Higher = softer impact over obstacles.
                                       # Too high = chassis barely moves (rigid feel)
-SUSPENSION_REST_LENGTH      = 0.16   # m — nominal spring length at standstill.
+SUSPENSION_REST_LENGTH      = 0.20   # m — nominal spring length at standstill.
                                       # Explicitly setting this avoids Bullet's long
                                       # default rest-length, which can leave the chassis
                                       # riding too high and wheelie-prone.
-SUSPENSION_MAX_TRAVEL_CM    = 20.0   # cm — total suspension stroke.
+SUSPENSION_MAX_TRAVEL_CM    = 28.0   # cm — total suspension stroke.
                                       # Shorter = less chassis pitch/roll range (stabler);
                                       # longer = wheels track rougher terrain but chassis
                                       # tips more dramatically on steep slopes
-MAX_SUSPENSION_FORCE        = 5200.0  # N per wheel — caps suspension load.
+MAX_SUSPENSION_FORCE        = 4300.0  # N per wheel — caps suspension load.
                                        # Keeps the chassis from over-extending/rebounding
                                        # aggressively during hard throttle transitions.
 
 # ── Wheel–ground contact ─────────────────────────────────────────────────────
-WHEEL_FRICTION    = 5.0   # friction coefficient for wheel–terrain contact.
+WHEEL_FRICTION    = 3.8   # friction coefficient for wheel–terrain contact.
                            # Higher = more grip (less sliding on slopes/corners);
                            # lower = wheels slip, rover drifts (realistic on loose soil)
-ROLL_INFLUENCE    = 0.05  # [0..1] fraction of chassis roll transferred to suspension.
+ROLL_INFLUENCE    = 0.20  # [0..1] fraction of chassis roll transferred to suspension.
                            # 0 = full anti-roll (arcade, very stable, wheels lift off terrain);
                            # 1 = no anti-roll correction (realistic, tips easily on slopes).
                            # 0.1–0.3 is a good balance for a compact rover
 
 # ── Chassis rigid-body damping ────────────────────────────────────────────────
 # Applied directly to the Bullet rigid body, independent of suspension.
-CHASSIS_LINEAR_DAMPING  = 0.25   # [0..1] simulates air drag / rolling resistance.
+CHASSIS_LINEAR_DAMPING  = 0.20   # [0..1] simulates air drag / rolling resistance.
                                    # Higher = slows down faster when throttle released;
                                    # 0 = coasts indefinitely (no drag at all)
-CHASSIS_ANGULAR_DAMPING = 0.96   # [0..1] resists rotation of the chassis body.
+CHASSIS_ANGULAR_DAMPING = 0.45   # [0..1] resists rotation of the chassis body.
                                    # Higher = less tumbling/spinning after a tip;
                                    # too high (→1) feels magnetically glued upright
-CHASSIS_ANGULAR_FACTOR  = 0.2    # [0..1] scales torques that pitch (front/back tilt) and
+CHASSIS_ANGULAR_FACTOR  = 0.70   # [0..1] scales torques that pitch (front/back tilt) and
                                    # roll (side tilt) the chassis — applied as Vec3(factor, factor, 1.0)
                                    # so yaw (steering) remains unrestricted.
                                    # 0 = chassis cannot pitch or roll at all (fully arcade);
@@ -90,10 +90,10 @@ CHASSIS_ANGULAR_FACTOR  = 0.2    # [0..1] scales torques that pitch (front/back 
 
 # ── Anti-wheelie controls ─────────────────────────────────────────────────────
 # These activate only during forward throttle when front wheels unload.
-ANTI_WHEELIE_PITCH_START_DEG   = 8.0    # start limiting when nose-up exceeds this.
-ANTI_WHEELIE_PITCH_CUTOFF_DEG  = 17.0   # fully cut engine by this pitch if front unloaded.
-ANTI_WHEELIE_SINGLE_CONTACT    = 0.65   # engine scale if only 1 front wheel touches.
-ANTI_WHEELIE_NO_FRONT_CONTACT  = 0.30   # engine scale if both front wheels are airborne.
+ANTI_WHEELIE_PITCH_START_DEG   = 12.0   # start limiting when nose-up exceeds this.
+ANTI_WHEELIE_PITCH_CUTOFF_DEG  = 24.0   # fully cut engine by this pitch if front unloaded.
+ANTI_WHEELIE_SINGLE_CONTACT    = 0.86   # engine scale if only 1 front wheel touches.
+ANTI_WHEELIE_NO_FRONT_CONTACT  = 0.60   # engine scale if both front wheels are airborne.
 
 # ── Visual body Z offset ──────────────────────────────────────────────────────
 # Shifts the rendered body mesh relative to the chassis centre-of-mass node.
@@ -235,6 +235,10 @@ class Rover:
         chassis_node.setLinearDamping(CHASSIS_LINEAR_DAMPING)
         chassis_node.setAngularDamping(CHASSIS_ANGULAR_DAMPING)
         chassis_node.setAngularFactor(Vec3(CHASSIS_ANGULAR_FACTOR, CHASSIS_ANGULAR_FACTOR, 1.0))
+        chassis_node.setFriction(1.15)
+        if hasattr(chassis_node, "setCcdMotionThreshold"):
+            chassis_node.setCcdMotionThreshold(0.03)
+            chassis_node.setCcdSweptSphereRadius(0.24)
 
         self.chassis_np = render.attachNewNode(chassis_node)
         self.chassis_np.setPos(*start_pos)

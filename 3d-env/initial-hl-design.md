@@ -2,6 +2,7 @@
 
 > Historical concept document.
 > The project structure described in the original version is no longer current.
+> Start with `../docs/README.md` for the current documentation set.
 >
 > Current structure:
 > - simulator stays in `3d-env/`

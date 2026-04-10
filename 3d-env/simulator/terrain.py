@@ -27,6 +27,12 @@ SCENE_LAYOUT = {
         "pad_half_extents": (18.0, 13.0),
         "floor_z": -1.6,
     },
+    "start_hub": {
+        "center": (0.0, 20.0),
+        "pad_half_extents": (13.0, 9.0),
+        "surround_half_extents": (40.0, 30.0),
+        "floor_z": -0.8,
+    },
     "roads": {
         "width": 7.5,
         "feather": 12.0,
@@ -80,6 +86,7 @@ def _road_segments():
     pa = SCENE_LAYOUT["plant_a"]
     pb = SCENE_LAYOUT["plant_b"]
     bld = SCENE_LAYOUT["building"]
+    hub = SCENE_LAYOUT["start_hub"]
 
     loop_a = _rect_loop_points(*pa["center"], *pa["loop_half_extents"])
     loop_b = _rect_loop_points(*pb["center"], *pb["loop_half_extents"])
@@ -98,6 +105,11 @@ def _road_segments():
         bld["center"],
         (44.0, 34.0),
         (pb["center"][0] - pb["loop_half_extents"][0], pb["center"][1]),
+    ]
+    connect_start_hub = [
+        hub["center"],
+        (0.0, 8.0),
+        bld["center"],
     ]
 
     segments = []
@@ -132,6 +144,16 @@ def _road_segments():
             (p0, z0) = nodes[i]
             (p1, z1) = nodes[i + 1]
             segments.append((p0, p1, z0, z1))
+
+    hub_nodes = [
+        (connect_start_hub[0], hub["floor_z"]),
+        (connect_start_hub[1], -1.2),
+        (connect_start_hub[2], bld["floor_z"]),
+    ]
+    for i in range(len(hub_nodes) - 1):
+        (p0, z0) = hub_nodes[i]
+        (p1, z1) = hub_nodes[i + 1]
+        segments.append((p0, p1, z0, z1))
 
     return segments
 
@@ -223,7 +245,12 @@ def _base_height(x, y):
 
 
 def _apply_flatten_pads(x, y, h):
-    specs = [SCENE_LAYOUT["plant_a"], SCENE_LAYOUT["plant_b"], SCENE_LAYOUT["building"]]
+    specs = [
+        SCENE_LAYOUT["plant_a"],
+        SCENE_LAYOUT["plant_b"],
+        SCENE_LAYOUT["building"],
+        SCENE_LAYOUT["start_hub"],
+    ]
     for spec in specs:
         cx, cy = spec["center"]
         hx, hy = spec["pad_half_extents"]
@@ -233,6 +260,17 @@ def _apply_flatten_pads(x, y, h):
         inner = _smoothstep(1.15, 0.80, d)
         if inner > 0.0:
             h = h * (1.0 - inner) + spec["floor_z"] * inner
+
+        # Optional wider apron around a pad to reduce abrupt slopes nearby.
+        sh = spec.get("surround_half_extents")
+        if sh:
+            shx, shy = sh
+            snx = (x - cx) / max(1e-5, shx)
+            sny = (y - cy) / max(1e-5, shy)
+            sd = math.sqrt(snx * snx + sny * sny)
+            surround = _smoothstep(1.28, 0.82, sd)
+            if surround > 0.0:
+                h = h * (1.0 - surround * 0.82) + spec["floor_z"] * (surround * 0.82)
     return h
 
 
@@ -360,6 +398,8 @@ class Terrain:
 
         node = BulletRigidBodyNode("terrain_body")
         node.addShape(shape)
+        node.setFriction(1.35)
+        node.setRestitution(0.0)
         self.body_np = self.np.attachNewNode(node)
 
         xy_scale = TERRAIN_SIZE / (n - 1)

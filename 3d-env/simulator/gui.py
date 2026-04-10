@@ -106,7 +106,16 @@ class MenuBar(DirectObject):
     simulator callbacks for all actions.
     """
 
-    def __init__(self, on_restart, on_mqtt, on_keys, on_appearance, on_import_export):
+    def __init__(
+        self,
+        on_restart,
+        on_mqtt,
+        on_keys,
+        on_appearance,
+        on_import_export,
+        telemetry_policy_getter=None,
+        on_telemetry_policy_change=None,
+    ):
         DirectObject.__init__(self)
         ensure_imgui(
             theme_name=getattr(base, "_imgui_theme", "light"),
@@ -118,6 +127,8 @@ class MenuBar(DirectObject):
         self._on_keys = on_keys
         self._on_appearance = on_appearance
         self._on_import_export = on_import_export
+        self._telemetry_policy_getter = telemetry_policy_getter
+        self._on_telemetry_policy_change = on_telemetry_policy_change
 
         self.accept("imgui-new-frame", self._draw)
 
@@ -139,6 +150,18 @@ class MenuBar(DirectObject):
         if imgui.begin_menu("Settings"):
             if imgui.menu_item_simple("MQTT Setup", "Ctrl+M"):
                 self._on_mqtt_click()
+            if imgui.begin_menu("Telemetry Policy"):
+                current_policy = "auto"
+                if self._telemetry_policy_getter:
+                    current_policy = str(self._telemetry_policy_getter() or "auto").strip().lower()
+                for label, value in (
+                    ("Automatic", "auto"),
+                    ("Force Enabled", "force_on"),
+                    ("Force Disabled", "force_off"),
+                ):
+                    if imgui.menu_item(label, "", current_policy == value)[0]:
+                        self._on_telemetry_policy_click(value)
+                imgui.end_menu()
             if imgui.menu_item_simple("Appearance"):
                 self._on_appearance_click()
             if imgui.menu_item_simple("Import/Export"):
@@ -158,6 +181,10 @@ class MenuBar(DirectObject):
     def _on_import_export_click(self):
         if self._on_import_export:
             self._on_import_export()
+
+    def _on_telemetry_policy_click(self, policy):
+        if self._on_telemetry_policy_change:
+            self._on_telemetry_policy_change(policy)
 
     def _on_appearance_click(self):
         if self._on_appearance:
@@ -183,6 +210,8 @@ class StatusBar:
         self._mqtt_mode = "hybrid"
         self._control_hz = 20
         self._telemetry_hz = 2
+        self._telemetry_policy = "auto"
+        self._telemetry_enabled = False
         self._frame = DirectFrame(
             frameColor=COLOR_STATUS_BG,
             frameSize=(-1.6, 1.6, -0.04, 0.04),
@@ -225,7 +254,15 @@ class StatusBar:
         self._status_text = text
         self._refresh_status_label()
 
-    def set_mqtt_state(self, state, mode=None, control_hz=None, telemetry_hz=None):
+    def set_mqtt_state(
+        self,
+        state,
+        mode=None,
+        control_hz=None,
+        telemetry_hz=None,
+        telemetry_policy=None,
+        telemetry_enabled=None,
+    ):
         self._mqtt_state = state
         if mode is not None:
             self._mqtt_mode = str(mode)
@@ -233,12 +270,17 @@ class StatusBar:
             self._control_hz = int(control_hz)
         if telemetry_hz is not None:
             self._telemetry_hz = int(telemetry_hz)
+        if telemetry_policy is not None:
+            self._telemetry_policy = str(telemetry_policy)
+        if telemetry_enabled is not None:
+            self._telemetry_enabled = bool(telemetry_enabled)
         self._refresh_status_label()
 
     def _refresh_status_label(self):
         state_text = self._normalized_state(self._mqtt_state)
+        telemetry_state = "on" if self._telemetry_enabled else "off"
         self._mqtt_lbl.setText(
-            f"MQTT {state_text} | M:{self._mqtt_mode} | C:{self._control_hz}Hz T:{self._telemetry_hz}Hz"
+            f"MQTT {state_text} | M:{self._mqtt_mode} | C:{self._control_hz}Hz T:{self._telemetry_hz}Hz | Tel:{self._telemetry_policy}/{telemetry_state}"
         )
         self._mqtt_lbl["text_fg"] = self._mqtt_state_color(state_text)
         self._status_lbl.setText(self._status_text)

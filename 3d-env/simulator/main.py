@@ -2,16 +2,20 @@ import os
 import sys
 import time
 
-# ── Environment detection (before Panda3D init) ────────────────────────────────
-def _is_wsl():
-    try:
-        with open('/proc/version', 'r') as f:
-            return 'microsoft' in f.read().lower()
-    except (FileNotFoundError, OSError):
-        return False
+from gpu_probe import (
+    detect_startup_environment,
+    format_preflight_lines,
+    format_runtime_lines,
+)
 
-_WSL = _is_wsl()
-_HAS_GPU_DEVICE = os.path.exists('/dev/dri/renderD128') if _WSL else True
+# ── Environment detection (before Panda3D init) ────────────────────────────────
+_GPU_PREF = os.environ.get("ROVER_GPU_PREFERENCE", "nvidia")
+_GPU_PREFLIGHT = detect_startup_environment(_GPU_PREF)
+for _line in format_preflight_lines(_GPU_PREFLIGHT):
+    print(_line)
+
+_WSL = _GPU_PREFLIGHT["is_wsl"]
+_HAS_GPU_DEVICE = _GPU_PREFLIGHT["threaded_rendering_supported"]
 
 from panda3d.core import load_prc_file_data
 
@@ -33,7 +37,7 @@ load_prc_file_data("", "\n".join(_prc))
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import (
     Vec3, Point3, AmbientLight, DirectionalLight, LColor,
-    WindowProperties, CardMaker, BitMask32, Texture, Shader, PNMImage, StringStream,
+    WindowProperties, CardMaker, BitMask32, Texture, PNMImage, StringStream,
     DepthOffsetAttrib
 )
 from panda3d.bullet import BulletWorld, BulletRigidBodyNode, BulletSphereShape, BulletBoxShape
@@ -158,10 +162,13 @@ class RoverSimulator(ShowBase):
         self._cfg = load_settings()
         self._mqtt_cfg = self._cfg.get("mqtt", {})
         self._last_video_pub_mono = 0.0
+        self._gpu_preference = _GPU_PREFLIGHT["preference"]
 
         ShowBase.__init__(self)
 
+        self._force_shadows = os.environ.get("ROVER_FORCE_SHADOWS", "").lower() in ("1", "true", "yes", "on")
         self._software_mode = self._check_gpu()
+        self._shadows_enabled = (not self._software_mode) or self._force_shadows
 
         self._setup_window()
         self._setup_lighting()
@@ -172,7 +179,7 @@ class RoverSimulator(ShowBase):
         self._setup_mqtt()
 
         self.taskMgr.add(self._update, "update")
-        if not self._software_mode:
+        if self._shadows_enabled:
             self.taskMgr.add(self._fix_shadow_border, "fix_shadow_border")
 
     # ------------------------------------------------------------------
@@ -181,14 +188,30 @@ class RoverSimulator(ShowBase):
         gsg = self.win.getGsg()
         renderer = gsg.getDriverRenderer()
         vendor = gsg.getDriverVendor()
-        is_sw = 'llvmpipe' in renderer.lower() or 'swrast' in renderer.lower()
+        runtime_lines, is_sw, runtime_class = format_runtime_lines(
+            renderer,
+            vendor,
+            self._gpu_preference,
+        )
+        for line in runtime_lines:
+            print(line)
 
         tag = "SOFTWARE" if is_sw else "GPU"
-        print(f"[{tag}] Renderer: {renderer}")
-        print(f"[{tag}] Vendor:   {vendor}")
+        if runtime_class == "nvidia":
+            print(f"[{tag}] NVIDIA acceleration active.")
+        elif runtime_class == "amd":
+            print(f"[{tag}] AMD acceleration active.")
+        elif runtime_class == "intel":
+            print(f"[{tag}] Intel/native OpenGL acceleration active.")
+        elif runtime_class == "unknown":
+            print(f"[{tag}] GPU vendor not recognized; continuing with detected renderer.")
 
         if is_sw:
-            print(f"[{tag}] *** Performance will be degraded — shadows disabled ***")
+            if self._force_shadows:
+                print(f"[{tag}] Software renderer detected, but ROVER_FORCE_SHADOWS is enabled.")
+                print(f"[{tag}] Shadows will run with reduced performance.")
+            else:
+                print(f"[{tag}] *** Performance will be degraded — shadows disabled ***")
             if _WSL:
                 print(f"[{tag}] WSL2 GPU passthrough not available.")
                 print(f"[{tag}] For GPU rendering:")
@@ -198,6 +221,10 @@ class RoverSimulator(ShowBase):
                 print(f"[{tag}]   1. Update NVIDIA driver (nvidia.com/drivers)")
                 print(f"[{tag}]   2. PowerShell (admin): wsl --update")
                 print(f"[{tag}]   3. PowerShell: wsl --shutdown  (then reopen)")
+            else:
+                print(f"[{tag}] Linux software renderer detected (likely llvmpipe/swrast).")
+                print(f"[{tag}] Verify OpenGL driver install and active GPU renderer.")
+                print(f"[{tag}] You can force shadows for testing: ROVER_FORCE_SHADOWS=1")
 
         return is_sw
 
@@ -220,13 +247,11 @@ class RoverSimulator(ShowBase):
 
         sun = DirectionalLight("sun")
         sun.setColor(LColor(1.05, 0.98, 0.85, 1))
-        if not self._software_mode:
-            sun.setShadowCaster(True, 2048, 2048)
-            # Keep the shadow camera window comfortably larger than the rover's
-            # working area so the moving shadow-map footprint does not show up
-            # as a dark rectangle on the terrain around it.
-            sun.getLens().setFilmSize(72, 72)
-            sun.getLens().setNearFar(10, 240)
+        if self._shadows_enabled:
+            # Large fixed shadow frustum to avoid a moving shadow-camera footprint.
+            sun.setShadowCaster(True, 4096, 4096)
+            sun.getLens().setFilmSize(440, 440)
+            sun.getLens().setNearFar(10, 520)
 
         self._sun_np = self.render.attachNewNode(sun)
         self._sun_np.setPos(self._SUN_OFFSET)
@@ -366,11 +391,12 @@ class RoverSimulator(ShowBase):
         self.terrain.np.show(main_mask)
 
         spawn_x, spawn_y = SCENE_LAYOUT["spawn"]["xy"]
-        self._spawn_point = (spawn_x, spawn_y, self.terrain.height_at(spawn_x, spawn_y) + 4.0)
+        self._spawn_point = (spawn_x, spawn_y, self.terrain.height_at(spawn_x, spawn_y) + 2.2)
         self.rover = Rover(self.render, self.bullet_world, start_pos=self._spawn_point)
 
         self._solar_nps = []
         self._building_nps = []
+        self._hub_nps = []
         self._stone_nps = []
         self._tree_nps = []
         self._obstacle_footprints = []
@@ -378,24 +404,9 @@ class RoverSimulator(ShowBase):
         self._register_road_keepout()
         self._create_solar_plants(main_mask)
         self._create_operations_building(main_mask)
+        self._create_start_hub(main_mask)
         self._create_stones(main_mask)
         self._create_trees(main_mask)
-
-        # PCF soft-shadow shader (GPU only — too expensive for software rendering)
-        if not self._software_mode:
-            pcf = Shader.load(Shader.SL_GLSL, "shadow_pcf.vert", "shadow_pcf.frag")
-            self.terrain.np.setShader(pcf)
-            self.rover.chassis_np.setShader(pcf)
-            for wn in self.rover.wheel_nps:
-                wn.setShader(pcf)
-            for sn in self._stone_nps:
-                sn.setShader(pcf)
-            for tn in self._tree_nps:
-                tn.setShader(pcf)
-            for pn in self._solar_nps:
-                pn.setShader(pcf)
-            for bn in self._building_nps:
-                bn.setShader(pcf)
 
         self._flip_timer   = 0.0
 
@@ -419,7 +430,7 @@ class RoverSimulator(ShowBase):
                 sy = p0[1] + dy * t
                 self._register_keepout(sx, sy, road_w)
 
-        for key in ("plant_a", "plant_b", "building"):
+        for key in ("plant_a", "plant_b", "building", "start_hub"):
             spec = SCENE_LAYOUT[key]
             hx, hy = spec["pad_half_extents"]
             self._register_keepout(spec["center"][0], spec["center"][1], math.sqrt(hx * hx + hy * hy) + 3.0)
@@ -428,6 +439,8 @@ class RoverSimulator(ShowBase):
         body = BulletRigidBodyNode(name)
         body.addShape(BulletBoxShape(Vec3(hx, hy, hz)))
         body.setMass(0.0)
+        body.setFriction(1.25)
+        body.setRestitution(0.0)
         body_np = self.render.attachNewNode(body)
         body_np.setPos(x, y, z)
         self.bullet_world.attachRigidBody(body)
@@ -524,6 +537,75 @@ class RoverSimulator(ShowBase):
             2.9,
         )
         self._building_nps.append(collider_np)
+
+    def _create_start_hub(self, main_mask):
+        spec = SCENE_LAYOUT["start_hub"]
+        cx, cy = spec["center"]
+        hx, hy = spec["pad_half_extents"]
+        floor_z = spec["floor_z"]
+
+        pad = self.render.attachNewNode(_build_box_node("start_hub_pad", hx, hy, 0.22, (0.52, 0.53, 0.54)))
+        pad.setPos(cx, cy, floor_z + 0.22)
+        pad.setTwoSided(True)
+        pad.hide(BitMask32.allOn())
+        pad.show(main_mask)
+        self._hub_nps.append(pad)
+
+        pad_collider = self._add_static_box_collider(
+            "start_hub_pad_collider",
+            cx,
+            cy,
+            floor_z + 0.22,
+            hx,
+            hy,
+            0.22,
+        )
+        self._hub_nps.append(pad_collider)
+
+        charger_base = self.render.attachNewNode(
+            _build_box_node("charger_base", 1.15, 0.72, 0.30, (0.28, 0.30, 0.33))
+        )
+        charger_base.setPos(cx + 8.4, cy - 5.4, floor_z + 0.30)
+        charger_base.setTwoSided(True)
+        charger_base.hide(BitMask32.allOn())
+        charger_base.show(main_mask)
+        self._hub_nps.append(charger_base)
+
+        charger_post = self.render.attachNewNode(
+            _build_box_node("charger_post", 0.22, 0.22, 1.15, (0.70, 0.72, 0.74))
+        )
+        charger_post.setPos(cx + 8.4, cy - 5.4, floor_z + 1.45)
+        charger_post.setTwoSided(True)
+        charger_post.hide(BitMask32.allOn())
+        charger_post.show(main_mask)
+        self._hub_nps.append(charger_post)
+
+        charger_head = self.render.attachNewNode(
+            _build_box_node("charger_head", 0.36, 0.20, 0.18, (0.19, 0.52, 0.36))
+        )
+        charger_head.setPos(cx + 8.4, cy - 5.2, floor_z + 2.38)
+        charger_head.setTwoSided(True)
+        charger_head.hide(BitMask32.allOn())
+        charger_head.show(main_mask)
+        self._hub_nps.append(charger_head)
+
+        rail = self.render.attachNewNode(_build_box_node("hub_guard_rail", 0.12, 4.1, 0.42, (0.78, 0.79, 0.80)))
+        rail.setPos(cx + hx - 0.8, cy, floor_z + 0.42)
+        rail.setTwoSided(True)
+        rail.hide(BitMask32.allOn())
+        rail.show(main_mask)
+        self._hub_nps.append(rail)
+
+        charger_collider = self._add_static_box_collider(
+            "charger_collider",
+            cx + 8.4,
+            cy - 5.4,
+            floor_z + 0.95,
+            0.85,
+            0.55,
+            0.95,
+        )
+        self._hub_nps.append(charger_collider)
 
     # ── Stone obstacle creation ───────────────────────────────────────────────
     def _create_stones(self, main_mask):
@@ -733,6 +815,8 @@ class RoverSimulator(ShowBase):
             on_keys=self._open_settings_keys,
             on_appearance=self._open_settings_appearance,
             on_import_export=self._open_settings_import_export,
+            telemetry_policy_getter=self._current_telemetry_policy,
+            on_telemetry_policy_change=self._set_telemetry_policy,
         )
         self._status = StatusBar()
         self._settings_dlg = None
@@ -745,13 +829,7 @@ class RoverSimulator(ShowBase):
         self.accept("mouse1", self._on_mouse_click)
 
         self._status.set_status("Simulator ready")
-        mqtt_cfg = self._cfg.get("mqtt", {})
-        self._status.set_mqtt_state(
-            "disabled",
-            mode=mqtt_cfg["control_mode"],
-            control_hz=mqtt_cfg["control_hz"],
-            telemetry_hz=mqtt_cfg["telemetry_hz"],
-        )
+        self._refresh_status_bar("disabled")
 
     def _setup_mqtt(self):
         self._mqtt_bridge = MQTTBridge(self._cfg.get("mqtt", {}))
@@ -845,13 +923,22 @@ class RoverSimulator(ShowBase):
         self._mqtt_bridge = MQTTBridge(self._cfg.get("mqtt", {}))
         self._mqtt_bridge.start()
         self._status.set_status("Settings applied")
+        self._refresh_status_bar(self._mqtt_bridge.status_text())
+
+    def _current_telemetry_policy(self):
         mqtt_cfg = self._cfg.get("mqtt", {})
-        self._status.set_mqtt_state(
-            self._mqtt_bridge.status_text(),
-            mode=mqtt_cfg["control_mode"],
-            control_hz=mqtt_cfg["control_hz"],
-            telemetry_hz=mqtt_cfg["telemetry_hz"],
-        )
+        return str(mqtt_cfg.get("telemetry_policy", "auto")).strip().lower()
+
+    def _set_telemetry_policy(self, policy):
+        policy = str(policy or "").strip().lower()
+        if policy not in {"auto", "force_on", "force_off"}:
+            return
+        self._cfg.setdefault("mqtt", {})["telemetry_policy"] = policy
+        save_settings(self._cfg)
+        if self._settings_dlg:
+            self._settings_dlg.populate(self._cfg)
+        self._status.set_status(f"Telemetry policy set to {policy}")
+        self._refresh_status_bar()
 
     def _bind_direction_key(self, direction, event_name, source_id):
         self.accept(event_name,      self._set_key_source, [direction, source_id, True])
@@ -1005,6 +1092,8 @@ class RoverSimulator(ShowBase):
         }
 
     def _publish_state_if_due(self, now_mono, payload):
+        if not self._mqtt_publish_enabled():
+            return
         hz = max(1, int(self._cfg["mqtt"]["telemetry_hz"]))
         period = 1.0 / hz
         if now_mono - self._last_state_pub_mono < period:
@@ -1012,7 +1101,30 @@ class RoverSimulator(ShowBase):
         self._last_state_pub_mono = now_mono
         self._mqtt_bridge.publish_state(payload)
 
+    def _mqtt_publish_enabled(self):
+        mqtt_cfg = self._cfg.get("mqtt", {})
+        policy = str(mqtt_cfg.get("telemetry_policy", "auto")).strip().lower()
+        if policy == "force_on":
+            return True
+        if policy == "force_off":
+            return False
+        timeout_s = max(0.0, float(mqtt_cfg.get("gcs_presence_timeout_ms", 120000)) / 1000.0)
+        return self._mqtt_bridge.has_active_gcs(timeout_s)
+
+    def _refresh_status_bar(self, mqtt_state=None):
+        mqtt_cfg = self._cfg.get("mqtt", {})
+        self._status.set_mqtt_state(
+            mqtt_state if mqtt_state is not None else self._mqtt_bridge.status_text(),
+            mode=mqtt_cfg["control_mode"],
+            control_hz=mqtt_cfg["control_hz"],
+            telemetry_hz=mqtt_cfg["telemetry_hz"],
+            telemetry_policy=mqtt_cfg.get("telemetry_policy", "auto"),
+            telemetry_enabled=self._mqtt_publish_enabled() if hasattr(self, "_mqtt_bridge") else False,
+        )
+
     def _publish_video_if_due(self, now_mono):
+        if not self._mqtt_publish_enabled():
+            return
         video_cfg = self._cfg.get("video", {})
         if not video_cfg.get("enabled", True):
             return
@@ -1054,7 +1166,7 @@ class RoverSimulator(ShowBase):
 
     # ------------------------------------------------------------------
     def _update(self, task):
-        dt = globalClock.getDt()
+        dt = min(globalClock.getDt(), 1.0 / 30.0)
         now_mono = time.monotonic()
 
         local_throttle = 0.0
@@ -1092,7 +1204,7 @@ class RoverSimulator(ShowBase):
 
         # Apply forces BEFORE stepping physics so they take effect this frame
         self.rover.update(dt)
-        self.bullet_world.doPhysics(dt, 4, 1.0 / 60.0)
+        self.bullet_world.doPhysics(dt, 8, 1.0 / 120.0)
 
         # Flip detection: rover up-vector Z < 0 means upside-down (past 90°)
         up = self.rover.chassis_np.getQuat(self.render).xform(Vec3(0, 0, 1))
@@ -1104,13 +1216,6 @@ class RoverSimulator(ShowBase):
         else:
             self._flip_timer = 0.0
 
-        # Keep shadow centred on rover every frame (GPU mode only)
-        if not self._software_mode:
-            rp = self.rover.pos
-            self._sun_np.setPos(Point3(rp.x + self._SUN_OFFSET.x,
-                                       rp.y + self._SUN_OFFSET.y,
-                                       rp.z + self._SUN_OFFSET.z))
-            self._sun_np.lookAt(Point3(rp.x, rp.y, rp.z))
         cam_pos = self.camera.getPos(self.render)
         self._sky_np.setPos(cam_pos)
         for sp in self._sun_sprites:
@@ -1120,13 +1225,7 @@ class RoverSimulator(ShowBase):
         self._publish_state_if_due(now_mono, state_payload)
         self._publish_video_if_due(now_mono)
         self.gui.update_from_state(state_payload)
-        mqtt_cfg = self._cfg.get("mqtt", {})
-        self._status.set_mqtt_state(
-            self._mqtt_bridge.status_text(),
-            mode=mqtt_cfg["control_mode"],
-            control_hz=mqtt_cfg["control_hz"],
-            telemetry_hz=mqtt_cfg["telemetry_hz"],
-        )
+        self._refresh_status_bar()
         self._status.set_telemetry(self.rover.pos, self.rover.heading, self.rover.speed)
         return task.cont
 

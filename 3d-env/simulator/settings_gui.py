@@ -129,6 +129,9 @@ class SettingsDialog(DirectObject):
             "camera_topic": mqtt_cfg["camera_topic"],
             "control_hz": str(mqtt_cfg["control_hz"]),
             "telemetry_hz": str(mqtt_cfg["telemetry_hz"]),
+            "telemetry_policy": mqtt_cfg.get("telemetry_policy", "auto"),
+            "gcs_presence_topic": mqtt_cfg.get("gcs_presence_topic", "gcs/presence"),
+            "gcs_presence_timeout_ms": str(mqtt_cfg.get("gcs_presence_timeout_ms", 120000)),
             "failsafe_timeout_ms": str(mqtt_cfg["failsafe_timeout_ms"]),
             "control_mode": mqtt_cfg["control_mode"],
             "digital_throttle_step": str(mqtt_cfg["digital_throttle_step"]),
@@ -363,6 +366,9 @@ class SettingsDialog(DirectObject):
             ("Camera topic", "camera_topic"),
             ("Control rate (Hz)", "control_hz"),
             ("Telemetry rate (Hz)", "telemetry_hz"),
+            ("Telemetry policy", "telemetry_policy"),
+            ("GCS presence topic", "gcs_presence_topic"),
+            ("GCS presence timeout (ms)", "gcs_presence_timeout_ms"),
             ("Failsafe timeout (ms)", "failsafe_timeout_ms"),
             ("Control mode", "control_mode"),
             ("Digital throttle step", "digital_throttle_step"),
@@ -378,7 +384,7 @@ class SettingsDialog(DirectObject):
 
         tip = ttk.Label(
             mqtt_form,
-            text="Leave Client ID blank for auto-generate. control_mode: hybrid|analog|digital",
+            text="Leave Client ID blank for auto-generate. control_mode: hybrid|analog|digital. telemetry_policy: auto|force_on|force_off",
             wraplength=800,
             justify="left",
         )
@@ -600,6 +606,9 @@ class SettingsDialog(DirectObject):
             "camera_topic": self._draft["camera_topic"].strip(),
             "control_hz": _parse_int("control_hz", "Control rate (Hz)"),
             "telemetry_hz": _parse_int("telemetry_hz", "Telemetry rate (Hz)"),
+            "telemetry_policy": self._draft["telemetry_policy"].strip().lower(),
+            "gcs_presence_topic": self._draft["gcs_presence_topic"].strip(),
+            "gcs_presence_timeout_ms": _parse_int("gcs_presence_timeout_ms", "GCS presence timeout (ms)"),
             "failsafe_timeout_ms": _parse_int("failsafe_timeout_ms", "Failsafe timeout (ms)"),
             "control_mode": self._draft["control_mode"].strip().lower(),
             "digital_throttle_step": _parse_float("digital_throttle_step", "Digital throttle step", 0.0, 1.0),
@@ -612,6 +621,8 @@ class SettingsDialog(DirectObject):
         }
         if cfg["mqtt"]["control_mode"] not in {"hybrid", "analog", "digital"}:
             raise ValueError("Control mode must be one of: hybrid, analog, digital.")
+        if cfg["mqtt"]["telemetry_policy"] not in {"auto", "force_on", "force_off"}:
+            raise ValueError("Telemetry policy must be one of: auto, force_on, force_off.")
 
         cfg["key_bindings"] = {
             **cfg.get("key_bindings", {}),

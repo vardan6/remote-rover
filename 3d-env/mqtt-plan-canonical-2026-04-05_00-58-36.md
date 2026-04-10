@@ -2,6 +2,7 @@
 Date: 2026-04-05 00:58:36 (+04)
 
 > Historical frozen Phase 2 contract.
+> For the current system documentation, start with `../docs/README.md`.
 > The current codebase has moved beyond this exact scope and now includes MQTT camera-frame publication in later work.
 > Keep this file as the Phase 2 control/telemetry contract reference, not as a complete description of current runtime behavior.
 

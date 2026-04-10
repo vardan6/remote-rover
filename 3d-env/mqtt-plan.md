@@ -1,5 +1,8 @@
 # MQTT Setup (Deprecated)
 
+> Deprecated planning note.
+> Use `../docs/README.md` for the current documentation set.
+
 This draft has been superseded.
 
 Use this canonical file instead:

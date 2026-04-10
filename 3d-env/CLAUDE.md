@@ -19,16 +19,21 @@ All components communicate via an external MQTT broker.
 ## Commands
 
 ```bash
-# Install simulator dependencies
+# Run with Linux / native WSL Python
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run the simulator
 python simulator/main.py
 
-# Run with GPU (Windows)
+# Linux / WSL helper launcher
+./run.sh
+
+# Run with Windows GPU Python
+python -m venv .venv-gpu
+.\.venv-gpu\Scripts\python -m pip install -r requirements.txt
 run.bat
 
-# Run with GPU (WSL2, requires NVIDIA GPU passthrough)
+# Run from WSL through the Windows GPU env
 ./run_gpu.sh
 ```
 

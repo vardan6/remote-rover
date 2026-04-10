@@ -1,5 +1,12 @@
 # Project Review And Current State
 
+> Historical review snapshot.
+> For the current presentation-ready documentation set, start with:
+> - `docs/README.md`
+> - `docs/current-state.md`
+> - `docs/architecture.md`
+> - `docs/implementation-roadmap.md`
+
 ## Summary
 
 The project structure is now correct and the MQTT bootstrap path is implemented end to end:
