@@ -2,9 +2,10 @@
 
 ## Summary
 
-The project currently consists of two working applications inside one repository:
+The project currently consists of two working applications and one new simulator scaffold inside one repository:
 - `3d-env/`: the simulator
 - `gcs_server/`: the browser-facing Ground Control Station
+- `rover-sim-next/`: the next simulator scaffold for the planned ROS 2 + Gazebo successor path
 
 The main end-to-end MQTT control loop is implemented and usable today.
 
@@ -24,8 +25,9 @@ Implemented now:
 Implemented now:
 - the simulator publishes rover telemetry over MQTT
 - the GCS subscribes to telemetry and relays it to connected browser clients
-- the browser dashboard shows rover motion, heading, pseudo-GPS, camera mode, and power placeholders
+- the browser dashboard shows rover motion, heading, pseudo-GPS, camera mode, and power values
 - the GCS tracks whether telemetry is fresh or stale
+- the GCS normalizes telemetry for replay/session storage
 
 ### End-To-End Camera Feed
 
@@ -56,6 +58,7 @@ Implemented now:
 - local overrides at `config/common.local.json`
 - simulator and GCS both consume the shared MQTT and GCS runtime settings
 - GCS can edit MQTT settings through a browser setup page and reconnect live
+- GCS exposes config-backed simulator backend identity: `3d-env` or `rover-sim-next`
 
 ### GCS-Aware Telemetry Publishing
 
@@ -72,6 +75,32 @@ Current policies:
 
 This is the current bandwidth-saving mechanism for data-sensitive deployments.
 
+### Logging And Replay
+
+Implemented now:
+- the GCS persists replay-capable session data to SQLite
+- the GCS records telemetry, control frames, runtime events, and camera timing metadata
+- the GCS exposes replay session APIs
+- the GCS provides a separate replay page
+- the replay page can load a recorded session and play back telemetry and runtime events
+- the replay page includes a first Leaflet-based map playback view
+
+Current storage model:
+- session metadata is stored in SQLite
+- telemetry, control, and runtime events are stored in SQLite
+- camera timing metadata is stored in SQLite
+- synchronized video file playback is not implemented yet
+
+### New Simulator Successor Scaffold
+
+Implemented now:
+- `rover-sim-next/` exists as a new simulator sub-project scaffold
+- ROS 2 package metadata and Gazebo-oriented layout are present
+- placeholder config, launch entrypoint, MQTT bridge module, `URDF` directory, and `SDF` world directory are present
+
+This is not yet a working replacement simulator.
+It is the repository starting point for the successor backend.
+
 ## Current Known Limitations
 
 ### 1. Media Transport Is Still A Bootstrap Path
@@ -82,7 +111,15 @@ Current video transport is:
 
 This works for demonstration and development, but it is not the intended final architecture for scalable live video.
 
-### 2. GCS State Is Single-Instance Only
+### 2. Live Map Is Not On The Main Dashboard Yet
+
+Replay now has a first map view, but the live dashboard still does not have a dedicated map panel.
+
+That means:
+- recorded rover tracks can be viewed on a map in replay
+- live rover map tracking is still a next step
+
+### 3. GCS State Is Single-Instance Only
 
 The current GCS runtime state is in memory.
 
@@ -91,11 +128,11 @@ That means:
 - it is not yet suitable for multiple coordinated GCS backend instances
 - a proper shared backend such as Redis is still needed for scale-out
 
-### 3. Authentication Is Not Implemented
+### 4. Authentication Is Not Implemented
 
 There is currently no authentication or authorization layer for operators, observers, or configuration changes.
 
-### 4. Multi-GCS Policy Is Only Partially Defined
+### 5. Multi-GCS Policy Is Only Partially Defined
 
 The system now supports presence per GCS instance, but the broader operational model is not fully defined yet.
 
@@ -104,8 +141,9 @@ Still to define clearly:
 - which GCS roles are allowed to enable telemetry
 - whether observer-only sessions should count as active for all deployments
 - whether future real-rover mode should use the same publish gating policy as the simulator
+- how replay/logging ownership should work if multiple GCS backends are later deployed
 
-### 5. Configuration Management Is Still Local-File Based
+### 6. Configuration Management Is Still Local-File Based
 
 The shared config model is practical for development, but it is still file-based and local.
 
@@ -114,6 +152,18 @@ It does not yet include:
 - secret management
 - deployment-specific config packaging
 - admin authorization for runtime changes
+
+### 7. `rover-sim-next` Is Still A Scaffold
+
+The new simulator successor project now exists, but it is not yet a functioning simulator backend.
+
+Not implemented yet in `rover-sim-next`:
+- real rover simulation
+- real Gazebo world integration
+- real MQTT bridge behavior
+- authoritative robot description
+- project asset pipeline
+- headless simulation workflow
 
 ## What Makes The Current State Presentable
 
@@ -126,6 +176,9 @@ You can show:
 - live telemetry in the dashboard
 - live simulated camera feed
 - bandwidth-aware publish suppression when no GCS is active
+- persistent GCS-side session logging
+- replay page with timeline and map playback
+- explicit backend identity for current and next simulator tracks
 
 That is enough to present the current system as a functioning integrated prototype with a clear path toward production hardening.
 
@@ -133,4 +186,4 @@ That is enough to present the current system as a functioning integrated prototy
 
 A precise way to describe the current state is:
 
-> Remote Rover is currently a working integrated prototype with a simulator, a browser-based Ground Control Station, MQTT-based control and telemetry, and a bootstrap video path. It already supports live control, telemetry, camera streaming, and bandwidth-aware simulator publishing based on active GCS presence. The main remaining work is hardening for production use: better media transport, distributed state, security, and multi-instance operational policy.
+> Remote Rover is currently a working integrated prototype with a simulator, a browser-based Ground Control Station, MQTT-based control and telemetry, a bootstrap video path, and first-generation GCS-side session replay. It already supports live control, telemetry, camera streaming, bandwidth-aware simulator publishing based on active GCS presence, and recorded replay of telemetry/control/event history. The main remaining work is completing the next simulator backend, adding live map support, improving media transport, and hardening for production use.

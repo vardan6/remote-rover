@@ -1,9 +1,21 @@
 # Simulation Platform Plan — Review
 
 **File reviewed:** `docs/simulation-platform-plan.md`
-**Reviewed against version:** current (updated, parallel-successor plan with `rover-sim-next`)
+**Reviewed against version:** current implemented plan and current repository state
+**Cross-check baseline:** `docs/simulation-platform-requironments.md`
 
 ---
+
+## What Is Now Implemented
+
+Compared with the earlier review state, these items are no longer only planned:
+
+- backend identity is implemented in GCS config
+- replay/session storage is implemented in GCS with SQLite
+- replay APIs are implemented
+- replay page is implemented
+- first map playback is implemented on the replay page using Leaflet
+- `rover-sim-next` exists as a repository scaffold
 
 ## What Improved Since the Previous Version
 
@@ -22,67 +34,48 @@ Many earlier issues were already addressed in this version:
 
 ## Remaining Issues
 
-### 1. Map Library Still Not Named
+This review is now focused on what is still missing relative to the requirements, not on items that are already implemented.
 
-The plan says "add early map support" and "map playback" but never names a library. The decision should be made explicit:
+### 1. Live Map Is Still Not On The Main Dashboard
 
-- **Leaflet.js** — correct first choice: 2D tiles, rover dot, heading arrow, no WebGL required, trivial to integrate into the existing GCS browser UI
-- **MapLibre GL JS** — upgrade when vector tiles or smooth animation are needed
-- **CesiumJS** — only if 3D globe/terrain becomes a requirement
+The replay page now has a first map implementation, but the main live dashboard still does not show a dedicated map.
 
-### 2. CAD Tooling Still Not Named
+Remaining work:
+- add a live map panel
+- reuse the same normalized track model as replay
+- keep live and replay coordinate handling consistent
 
-The plan refers to "real CAD source files" and "authoritative CAD-derived geometry" without naming a tool. For an open-source project the default should be stated:
+### 2. `rover-sim-next` Is Still A Scaffold
 
-- **FreeCAD 1.0** (Nov 2024) — stable, open source, no subscription, the correct default
-- **OpenSCAD** — worth naming for parametric components, relevant since current rover geometry is procedural code
-- Onshape, Fusion 360, and SolidWorks are valid if already in team use but should not be the implied default
+The successor simulator project now exists in the repository, but it is not yet a working backend.
 
-### 3. Mesh Format Is Vague
+Remaining work:
+- implement the real ROS 2/Gazebo runtime
+- implement the real MQTT bridge behavior
+- implement rover/world loading
+- implement headless/repeatable execution
 
-`"preferred simulation-ready mesh interchange format"` is undefined. Name it:
+### 3. Simulator-Side Logging Is Still Missing
 
-- **glTF/GLB** — correct choice: good material support, compact, widely supported by Blender, Bullet, and Gazebo
+The requirements call for logging on both the simulator side and the GCS side.
+The GCS side is now implemented first, but simulator-side logging is still not present.
 
-### 4. Coordinate Transform Is Under-Specified
+Remaining work:
+- log locally produced telemetry/control/runtime events from the simulator side
+- define how simulator-origin logs are imported or consumed in the GCS replay flow
 
-`"ENU-style local frame"` is good but incomplete. Add:
+### 4. Coordinate Model Is Still Only Partially Real
 
-- **pyproj** as the transform library (Python bindings for PROJ)
-- **UTM** as the projection default for field deployments — simple and well-understood
-- **LTP (Local Tangent Plane)** as an alternative for high-accuracy small-area sites
+The system still depends on current pseudo-GPS compatibility values from `3d-env`.
+Replay map support exists, but the full geospatial transform model is not yet implemented end-to-end.
 
-### 5. Physics Engine for `rover-sim-next` Not Named
+### 5. CAD And Authoritative Asset Workflow Is Still Planned Only
 
-The plan intentionally avoids locking an engine, which is correct. But candidate options should be listed to prevent the decision from staying vague indefinitely:
+The plan now names the workflow defaults, but there is still no implemented import or replacement path in code.
 
-- **MuJoCo** — best contact physics, Python-native, free, headless-capable, no ROS required
-- **PyBullet standalone** — direct upgrade from current Bullet/Panda3D, minimal stack change
-- **gz-sim (Gazebo Ionic)** — only if ROS 2 hardware integration becomes a concrete requirement
+### 6. Video Recording And Synchronized Playback Are Still Future Work
 
-### 6. AI-Generated Assets — Physics Accuracy Risk Not Acknowledged
-
-The plan allows Codex-generated rover geometry for early iteration. This is pragmatically correct, but should note:
-
-- AI-generated visual meshes are fine for appearance
-- AI-generated collision meshes need validation — incorrect mass/inertia properties will cause wrong physics behavior
-- Suggested rule: use AI for visual mesh, manually define collision primitives (boxes, cylinders, spheres) for physics until authoritative assets arrive
-
-### 7. Backend Selection Mechanism Not Described
-
-The plan states "one active simulator backend at a time" and "backend identity must be explicit in config or runtime selection" but never defines how. This should be resolved in Phase 1:
-
-- A config-file flag (e.g. `backend: rover-sim-next` vs `3d-env`)
-- Or a runtime GCS UI toggle
-- This mechanism must be defined before any parallel-running is attempted
-
-### 8. Video Sync Architecture Has No Sketch
-
-The plan says "reserve synchronization support for video now" and "reserve a video panel." This is correct future-proofing, but the session model should specify at minimum:
-
-- `camera_frame_index` or `pts` (presentation timestamp) in the session schema
-- A note that video will be stored as a separate file referenced by session ID
-- Without this, "reserved" is too vague to implement correctly when video is added
+The replay schema now reserves timing/media-reference support, but actual recorded video playback is still not implemented.
 
 ---
 
@@ -94,11 +87,13 @@ The plan says "reserve synchronization support for video now" and "reserve a vid
 | Headless mode | Fixed |
 | Isaac Sim NVIDIA dependency | Fixed |
 | ROS 2 not hardwired | Fixed |
-| ENU frame convention | Partially fixed — library and projection type still missing |
-| Convex decomposition mentioned | Yes — but mesh format (glTF/GLB) still not named |
-| Map library | Not named |
-| CAD tooling | Not named |
-| Physics engine candidates | Not listed |
-| AI asset physics accuracy risk | Not acknowledged |
-| Backend selection mechanism | Not described |
-| Video sync session schema | Too vague |
+| Requirements baseline document exists | Yes |
+| Backend selection mechanism | Implemented in GCS |
+| Replay/session storage | Implemented in GCS |
+| Replay page | Implemented |
+| First map playback | Implemented |
+| Live dashboard map | Still missing |
+| Simulator-side logging | Missing |
+| `rover-sim-next` working backend | Missing |
+| CAD/authoritative asset pipeline | Missing |
+| Recorded video playback | Missing |

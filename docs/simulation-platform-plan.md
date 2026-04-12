@@ -13,6 +13,26 @@ It replaces the earlier generic simulation-improvement framing with a concrete p
 This document is not a replacement for `docs/implementation-roadmap.md`.
 It is a companion plan focused on simulator evolution, asset workflows, map support, and logging/replay.
 
+## Implementation Status
+
+The plan is now partially implemented.
+
+Implemented from this plan:
+- config-backed backend identity in the GCS
+- `SQLite`-backed GCS replay/session storage
+- GCS replay APIs for session list, session detail, and session rollover
+- separate GCS replay page
+- first Leaflet-based replay map
+- normalized GCS-side telemetry handling for replay storage
+- `rover-sim-next/` repository scaffold with ROS 2/Gazebo-oriented structure
+
+Not implemented yet from this plan:
+- simulator-side logging in `3d-env`
+- live map panel on the main GCS dashboard
+- working `rover-sim-next` simulator backend
+- authoritative CAD/asset import pipeline
+- synchronized recorded video playback
+
 ## Current Implementation Reality
 
 The current simulator is a working Panda3D desktop application with Bullet physics.
@@ -30,11 +50,11 @@ Implemented today:
 - pseudo-GPS derived from local XY coordinates
 
 Not implemented yet:
-- browser map widget
-- proper geospatial coordinate model
+- browser live map widget on the main dashboard
+- proper geospatial coordinate transform model beyond current pseudo-GPS compatibility
 - CAD-driven asset pipeline
 - authoritative asset replacement workflow
-- session logging and replay architecture
+- simulator-side logging architecture
 - synchronized video recording and playback
 
 The current simulator is good enough for demos, operator workflow development, MQTT integration, and iterative UI work.
@@ -67,6 +87,16 @@ Why `rover-sim-next` is the current recommendation:
 - explicit that it is the successor to `3d-env`
 - intuitive in the repository
 - avoids locking the final long-term product name too early
+
+## Current Technical Direction
+
+The current repository direction for the successor simulator is now:
+- long-term architecture target: `ROS 2 + Gazebo`
+- current implementation state: scaffold only
+- contract strategy: keep MQTT/GCS compatibility with `3d-env` during transition
+
+This means the engine direction is no longer purely abstract.
+It is chosen at the repository-structure level, even though the real simulator backend is still to be implemented.
 
 ## Compatibility Contract With `gcs_server`
 
@@ -353,22 +383,18 @@ The key constraint is that these choices must remain replaceable behind stable c
 
 ## Long-Term Simulator Evolution Path
 
-The first implementation should not lock the repository too early to a final simulator engine.
+The current baseline target for the successor simulator is now `ROS 2 + Gazebo`.
 
-The long-term simulator path should remain open enough to support:
-- a prompt-friendly first build
-- later evaluation of a more formal robotics-oriented simulator
-- eventual authoritative asset integration
-
-Candidate simulator cores worth keeping in scope:
-- `PyBullet` standalone as the closest migration from the current Bullet-based simulator
-- `MuJoCo` if higher-quality contact physics and Python-first headless workflows become the priority
-- `gz-sim`/Gazebo only if ROS 2 integration and robotics ecosystem alignment become concrete requirements
+That choice fits the intended end state:
+- a simulator that can substitute for the real rover during development
+- clearer migration toward robotics-oriented workflows
+- better long-term fit for formal robot description and world composition
 
 Planning rules:
-- do not hardwire one engine release name as the entire strategy
-- preserve a migration path to a more formal simulator if hardware integration or richer robotics workflows later require it
+- keep the MQTT/GCS-facing contract stable even while the simulator stack changes underneath
+- preserve the development-asset to authoritative-asset replacement path
 - treat Isaac Sim as an explicit opt-in path with hard NVIDIA dependency, not a default assumption
+- keep the internal simulator implementation modular enough that components can still evolve later if needed
 
 ## Headless Mode And Recording Support
 
@@ -386,6 +412,10 @@ Session recording must not depend on a human operator watching the simulator win
 
 ### Phase 1
 
+Status:
+- mostly implemented in the GCS
+- remaining work is to formalize the coordinate/site model more fully
+
 - define compatibility contract with the current GCS
 - define backend identity and backend-selection behavior
 - implement backend selection first as an explicit config-backed choice in the GCS and shared config
@@ -398,6 +428,11 @@ Session recording must not depend on a human operator watching the simulator win
 
 ### Phase 2
 
+Status:
+- partially implemented
+- GCS-side logging, replay APIs, and replay page are in place
+- live dashboard map and simulator-side logging still remain
+
 - add early map support to the GCS
 - add logging to the GCS
 - add logging to the simulator side
@@ -406,6 +441,11 @@ Session recording must not depend on a human operator watching the simulator win
 
 ### Phase 3
 
+Status:
+- started
+- `rover-sim-next/` scaffold exists
+- real simulator functionality is still pending
+
 - build the first `rover-sim-next` backend
 - keep compatibility with current MQTT and GCS expectations
 - use development assets for rover and world where needed
@@ -413,11 +453,17 @@ Session recording must not depend on a human operator watching the simulator win
 
 ### Phase 4
 
+Status:
+- not started
+
 - introduce modular asset import workflow
 - replace selected development assets with authoritative assets
 - support project-specific world composition and asset ownership
 
 ### Phase 5
+
+Status:
+- not started
 
 - add synchronized video recording and playback
 - refine the long-term simulator core choice
@@ -428,6 +474,7 @@ Session recording must not depend on a human operator watching the simulator win
 Current planning defaults:
 - new sub-project name: `rover-sim-next`
 - transition mode: parallel successor
+- long-term simulator baseline: `ROS 2 + Gazebo`
 - GCS mode: selectable backend
 - backend selection first implementation: explicit config-backed selector, with optional later UI toggle
 - replay UI: separate page
@@ -451,3 +498,12 @@ The best practical strategy is:
 - add logging and replay as first-class architecture now
 - allow prompt-generated development assets at the start
 - replace them later with authoritative CAD-derived assets without changing the operator workflow or replay architecture
+
+## Next Implementation Steps
+
+The next concrete steps should be:
+- implement simulator-side logging in `3d-env`
+- add a live map panel to the main GCS dashboard using the same normalized track model as replay
+- turn `rover-sim-next` from scaffold into a functioning simulator backend with contract-compatible MQTT output
+- define the first authoritative robot/world asset ingestion path
+- add synchronized recorded video support later without changing the replay timeline model

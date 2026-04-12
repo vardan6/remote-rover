@@ -1,0 +1,19 @@
+simulation:
+  backend: rover-sim-next
+  backend_version: dev
+
+mqtt:
+  broker_host: 127.0.0.1
+  broker_port: 1883
+  topic_prefix: /projects/remote-rover
+  client_id: rover-sim-next
+  control_topic: control/manual
+  state_topic: telemetry/state
+  camera_topic: camera-feed
+  gcs_presence_topic: gcs/presence
+  telemetry_hz: 10
+
+site:
+  name: default-site
+  frame: enu
+  default_projection: utm
