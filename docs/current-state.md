@@ -8,6 +8,7 @@ The project currently consists of two working applications and one new simulator
 - `rover-sim-next/`: the next simulator scaffold for the planned ROS 2 + Gazebo successor path
 
 The main end-to-end MQTT control loop is implemented and usable today.
+The main next implementation priority is now `rover-sim-next`, not additional replay work.
 
 ## Implemented Today
 
@@ -91,6 +92,9 @@ Current storage model:
 - camera timing metadata is stored in SQLite
 - synchronized video file playback is not implemented yet
 
+These capabilities now exist as groundwork, but they are not the current critical path.
+The current critical path is turning `rover-sim-next` into a working simulator backend that can operate with the existing GCS.
+
 ### New Simulator Successor Scaffold
 
 Implemented now:
@@ -118,6 +122,9 @@ Replay now has a first map view, but the live dashboard still does not have a de
 That means:
 - recorded rover tracks can be viewed on a map in replay
 - live rover map tracking is still a next step
+
+This is no longer the immediate next step.
+It should follow after `rover-sim-next` is functioning with the GCS.
 
 ### 3. GCS State Is Single-Instance Only
 
@@ -165,6 +172,19 @@ Not implemented yet in `rover-sim-next`:
 - project asset pipeline
 - headless simulation workflow
 
+This is the main implementation gap in the repository.
+
+## Current Implementation Priority
+
+The next work should focus on `rover-sim-next` in this order:
+- make it launch as a real simulator process
+- make it accept control from the existing GCS
+- make it emit telemetry compatible with the existing GCS
+- make it provide at least the minimum camera compatibility needed for the current operator workflow
+- establish the coordinate and asset structure needed for later map, CAD, and replay work
+
+Replay, simulator-side logging, richer map UI, and synchronized video remain important, but they should follow this simulator integration milestone.
+
 ## What Makes The Current State Presentable
 
 The project is already in a solid demonstration state because the full operator loop is visible and understandable.
@@ -186,4 +206,4 @@ That is enough to present the current system as a functioning integrated prototy
 
 A precise way to describe the current state is:
 
-> Remote Rover is currently a working integrated prototype with a simulator, a browser-based Ground Control Station, MQTT-based control and telemetry, a bootstrap video path, and first-generation GCS-side session replay. It already supports live control, telemetry, camera streaming, bandwidth-aware simulator publishing based on active GCS presence, and recorded replay of telemetry/control/event history. The main remaining work is completing the next simulator backend, adding live map support, improving media transport, and hardening for production use.
+> Remote Rover is currently a working integrated prototype with a Panda3D simulator, a browser-based Ground Control Station, MQTT-based control and telemetry, a bootstrap video path, and first-generation GCS-side session replay. It already supports live control, telemetry, camera streaming, bandwidth-aware simulator publishing based on active GCS presence, and recorded replay of telemetry/control/event history. The main next step is completing `rover-sim-next` as a working successor backend that integrates with the existing GCS, after which live map, richer replay, improved media transport, and production hardening can continue.

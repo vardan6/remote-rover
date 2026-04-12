@@ -13,9 +13,12 @@ It replaces the earlier generic simulation-improvement framing with a concrete p
 This document is not a replacement for `docs/implementation-roadmap.md`.
 It is a companion plan focused on simulator evolution, asset workflows, map support, and logging/replay.
 
+The concrete first implementation checklist for the successor simulator is in:
+- `docs/rover-sim-next-phase-1-checklist.md`
+
 ## Implementation Status
 
-The plan is now partially implemented.
+The plan is now partially implemented, but the execution order needs to be clarified.
 
 Implemented from this plan:
 - config-backed backend identity in the GCS
@@ -26,12 +29,22 @@ Implemented from this plan:
 - normalized GCS-side telemetry handling for replay storage
 - `rover-sim-next/` repository scaffold with ROS 2/Gazebo-oriented structure
 
-Not implemented yet from this plan:
+Immediate implementation priority:
+- working `rover-sim-next` simulator backend
+- stable compatibility with the existing `gcs_server`
+- clear asset and coordinate foundations so the simulator can evolve without rework
+
+Deferred until after `rover-sim-next` works end-to-end:
 - simulator-side logging in `3d-env`
+- additional replay/logging work beyond what is already implemented in the GCS
 - live map panel on the main GCS dashboard
+- synchronized recorded video playback
+
+Still not implemented:
 - working `rover-sim-next` simulator backend
 - authoritative CAD/asset import pipeline
-- synchronized recorded video playback
+- full geospatial coordinate model
+- headless repeatable simulator workflow
 
 ## Current Implementation Reality
 
@@ -68,10 +81,21 @@ The transition goals are:
 - avoid breaking the current prototype
 - preserve the current MQTT/GCS integration contract
 - support both simulators during migration
-- add map support early in the GCS
-- add structured session logging and replay from the GCS
+- keep the already implemented GCS replay work available but not on the critical path
+- add map support early in the telemetry model and simulator contract, even if the full live map UI comes later
 - allow early prompt-driven asset generation
 - allow later replacement by professional CAD-derived assets
+
+## Planning Decision
+
+The correct next implementation sequence is:
+
+1. make `rover-sim-next` a working simulator backend
+2. connect it to the current `gcs_server` without breaking `3d-env`
+3. stabilize the rover model, world model, and coordinate model
+4. then continue with richer map, logging, replay, and video work
+
+This ordering still satisfies the original requirements because logging/replay remains part of the architecture and remains planned, but it is no longer treated as a prerequisite for the first usable `rover-sim-next` milestone.
 
 ## Recommended New Sub-Project Name
 
@@ -94,6 +118,16 @@ The current repository direction for the successor simulator is now:
 - long-term architecture target: `ROS 2 + Gazebo`
 - current implementation state: scaffold only
 - contract strategy: keep MQTT/GCS compatibility with `3d-env` during transition
+
+For planning purposes, the first implementation target should be modest:
+- one drivable rover
+- one loadable world
+- MQTT-compatible control and telemetry
+- enough camera integration to keep the current GCS usable
+- deterministic startup and basic headless support
+
+The first target is not "full realism".
+The first target is "usable replacement path beside `3d-env`".
 
 This means the engine direction is no longer purely abstract.
 It is chosen at the repository-structure level, even though the real simulator backend is still to be implemented.
@@ -122,12 +156,73 @@ The new simulator must preserve the current minimum MQTT compatibility surface s
 
 The new simulator may add more fields, but it must not break the live GCS dashboard or the replay normalization layer.
 
+### Additional First-Milestone Compatibility Rules
+
+For the first usable `rover-sim-next` milestone:
+- control commands from the current GCS must drive the simulated rover without a GCS-side protocol rewrite
+- telemetry cadence must be stable enough for the current dashboard
+- camera integration may begin with the same practical compatibility model already used by `3d-env`
+- backend identity must remain explicit so the GCS can distinguish `3d-env` from `rover-sim-next`
+
 ### Transition Rule
 
 During migration:
 - the GCS must be able to operate with either `3d-env` or `rover-sim-next`
 - one active simulator backend is expected at a time from the GCS point of view
 - backend identity must be explicit in config or runtime selection
+
+## `rover-sim-next` Implementation Scope
+
+The first implementation of `rover-sim-next` should be deliberately narrower than the full long-term simulator vision.
+
+### Phase 1 Scope: Minimum Working Backend
+
+Required in the first working version:
+- ROS 2 package that actually runs, not only scaffolding
+- Gazebo world that can launch reliably
+- rover description with wheels, chassis, and physically meaningful mass/inertia placeholders
+- control bridge from MQTT into simulator actuation
+- telemetry bridge from simulator state back into the existing GCS contract
+- camera path sufficient for the current GCS expectations
+- site origin and map-position config values carried through the telemetry model
+
+Allowed shortcuts in this phase:
+- simple development rover geometry
+- simple collision geometry
+- simple site/world geometry
+- practical pseudo-GPS compatibility while the full coordinate model is completed
+- rough AI-generated assets used as temporary development assets
+
+Not required for phase 1:
+- professional CAD-derived assets
+- final media architecture
+- simulator-side replay logging
+- final polished map UI inside the main GCS page
+
+### Phase 2 Scope: Simulator Foundations
+
+After phase 1 works end-to-end:
+- replace placeholder rover with a cleaner articulated rover description
+- formalize the local coordinate frame and map transform
+- define scene composition rules for terrain, obstacles, and site objects
+- add headless launch and repeatable scenario startup
+- document the asset import and replacement contract
+
+### Phase 3 Scope: Engineering Asset Path
+
+Once the simulator backend is stable:
+- establish the development-asset to authoritative-asset replacement workflow
+- import separated visual and collision meshes
+- document units, scale, provenance, and object-level ownership
+- add environment modules that can be maintained separately and composed into the top-level world
+
+### Phase 4 Scope: Logging, Replay, And Video
+
+After `rover-sim-next` is operational with the GCS:
+- align simulator-side logging with the existing GCS replay model
+- add live map on the main dashboard
+- extend replay to use the shared normalized coordinate model
+- later add synchronized recorded video references and playback
 
 ## Asset Strategy
 
@@ -217,7 +312,7 @@ Commercial CAD tools are still valid if the engineering team already uses them, 
 
 ## Map And Coordinate Model
 
-Map support is an early GCS feature, not a late enhancement.
+Map support remains an early design concern, but not all map UI work needs to block simulator implementation.
 It must work with both `3d-env` and `rover-sim-next`.
 
 ### Immediate Reality
@@ -265,10 +360,17 @@ Future upgrades remain open:
 
 The live map and replay map must use the same normalized track model so historical playback and live operation remain semantically consistent.
 
+### Implementation Order Rule
+
+For `rover-sim-next`, coordinate planning must happen before deeper world-building, but the first full live map UI can be deferred until after the simulator is running with the GCS.
+
 ## Logging And Replay Architecture
 
 Logging and replay are first-class architecture requirements.
 They are not optional future add-ons.
+
+However, they are not the next critical implementation milestone.
+The architecture should remain compatible with them, while actual new logging/replay work is deferred until `rover-sim-next` works end-to-end with the GCS.
 
 ### Required Capabilities
 

@@ -25,8 +25,16 @@ During transition, this simulator should preserve compatibility with the existin
 
 ## Planned Next Work
 
-- implement the ROS 2 node set
-- add rover description in `urdf/`
-- add world composition in `worlds/`
+Implementation priority for the first usable milestone:
+- implement the ROS 2 node set and real Gazebo launch flow
+- add a first drivable rover description in `urdf/`
+- add a first loadable development world in `worlds/`
 - bridge simulator state and controls to the current MQTT contract
-- add headless and repeatable recording-oriented launch modes
+- provide enough camera compatibility for the current GCS workflow
+- add deterministic startup and basic headless execution
+
+Deferred until after the first working GCS-connected milestone:
+- simulator-side replay/logging work
+- richer live-map integration in the GCS
+- authoritative CAD-derived asset replacement flow
+- synchronized recorded video support
