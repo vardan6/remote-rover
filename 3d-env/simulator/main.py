@@ -8,6 +8,19 @@ from gpu_probe import (
     format_runtime_lines,
 )
 
+# ── Optimus hint DLL (must load before Panda3D touches the display pipe) ───────
+# run.bat sets ROVER_OPTIMUS_HINT to the path of optimus_hint.dll when it exists.
+# Loading this DLL causes the NVIDIA driver to see the NvOptimusEnablement=1
+# export and route WGL (OpenGL) rendering to the discrete GPU.
+_OPTIMUS_HINT = os.environ.get("ROVER_OPTIMUS_HINT", "")
+if _OPTIMUS_HINT and os.path.isfile(_OPTIMUS_HINT):
+    import ctypes
+    try:
+        ctypes.CDLL(_OPTIMUS_HINT)
+        print(f"[GPU-PREFLIGHT] Optimus hint DLL loaded: {_OPTIMUS_HINT}")
+    except OSError as _e:
+        print(f"[GPU-PREFLIGHT] Failed to load optimus hint DLL: {_e}")
+
 # ── Environment detection (before Panda3D init) ────────────────────────────────
 _GPU_PREF = os.environ.get("ROVER_GPU_PREFERENCE", "nvidia")
 _GPU_PREFLIGHT = detect_startup_environment(_GPU_PREF)

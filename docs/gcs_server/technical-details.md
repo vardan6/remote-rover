@@ -28,8 +28,10 @@ Current important routes:
 
 Current control ownership model:
 - one active browser client at a time
+- the latest focused and visible dashboard browser becomes active
 - other connected browsers may observe
 - browser button states are collected by the GCS
+- browser blur or hidden state clears inputs and deactivates browser control
 - the GCS publishes MQTT control frames at `control_hz`
 
 This keeps browser clients off the broker directly and gives the GCS a clean control-plane role.
@@ -66,7 +68,7 @@ The current local state backend tracks:
 - latest telemetry payload
 - latest video frame metadata
 - broker connection status and freshness timestamps
-- active controller and lease timing
+- active controller and last input timestamp
 - video mode settings
 
 This is enough for the current single-process deployment model, but not enough for coordinated multi-instance operation.

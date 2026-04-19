@@ -59,7 +59,6 @@ Important rule:
 - `gcs.host`
 - `gcs.port`
 - `gcs.telemetry_stale_ms`
-- `gcs.controller_lease_ms`
 
 ## Running The Simulator
 
@@ -127,7 +126,7 @@ For the current end-to-end demo flow:
 2. start the GCS
 3. open the GCS in a browser
 4. start the simulator
-5. take control in the browser
+5. keep the GCS dashboard tab focused to drive
 6. confirm telemetry and camera are visible
 
 ## Telemetry Publish Policy Operations

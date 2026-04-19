@@ -204,6 +204,7 @@ def format_preflight_lines(info):
 def format_runtime_lines(renderer, vendor, preference=None):
     runtime = classify_runtime_driver(renderer, vendor)
     pref = normalize_preference(preference)
+    on_windows = os.name == "nt"
     lines = [
         f"[GPU] Renderer: {renderer}",
         f"[GPU] Vendor:   {vendor}",
@@ -212,6 +213,13 @@ def format_runtime_lines(renderer, vendor, preference=None):
     if pref == "nvidia" and runtime != "nvidia":
         if runtime in {"amd", "intel"}:
             lines.append(f"[GPU] NVIDIA requested but not active; using {runtime.upper()} fallback.")
+            if on_windows:
+                lines.append("[GPU] Optimus dual-GPU: WGL was routed to the integrated GPU.")
+                lines.append("[GPU] Fix A: build optimus_hint\\optimus_hint.dll (see optimus_hint\\optimus_hint.c)")
+                lines.append("[GPU]         gcc -shared -o optimus_hint\\optimus_hint.dll optimus_hint\\optimus_hint.c")
+                lines.append("[GPU] Fix B: NVIDIA Control Panel > Manage 3D Settings > Program Settings")
+                lines.append("[GPU]         > add .venv-gpu\\Scripts\\python.exe")
+                lines.append("[GPU]         > OpenGL rendering GPU = your NVIDIA card")
         elif runtime == "software":
             lines.append("[GPU] NVIDIA requested but not active; using software fallback.")
         else:

@@ -3,44 +3,32 @@ from panda3d.core import (
     GeomVertexFormat, GeomVertexWriter, PNMImage
 )
 from panda3d.bullet import BulletRigidBodyNode, BulletHeightfieldShape, ZUp
+import json
 import math
+from pathlib import Path
 
 
-TERRAIN_SIZE = 400
-TILE_COUNT = 320
+SCENE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "terrain_scene.json"
 
-SCENE_LAYOUT = {
-    "plant_a": {
-        "center": (-108.0, -84.0),
-        "pad_half_extents": (26.0, 17.0),
-        "floor_z": -5.2,
-        "loop_half_extents": (37.0, 26.0),
-    },
-    "plant_b": {
-        "center": (112.0, 82.0),
-        "pad_half_extents": (26.0, 17.0),
-        "floor_z": -4.6,
-        "loop_half_extents": (37.0, 26.0),
-    },
-    "building": {
-        "center": (0.0, -2.0),
-        "pad_half_extents": (18.0, 13.0),
-        "floor_z": -1.6,
-    },
-    "start_hub": {
-        "center": (0.0, 20.0),
-        "pad_half_extents": (13.0, 9.0),
-        "surround_half_extents": (40.0, 30.0),
-        "floor_z": -0.8,
-    },
-    "roads": {
-        "width": 7.5,
-        "feather": 12.0,
-    },
-    "spawn": {
-        "xy": (0.0, 20.0),
-    },
-}
+
+def _to_tuples(value):
+    if isinstance(value, list):
+        return tuple(_to_tuples(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _to_tuples(item) for key, item in value.items()}
+    return value
+
+
+def _load_scene_config():
+    with SCENE_CONFIG_PATH.open("r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    return _to_tuples(payload)
+
+
+_SCENE_CONFIG = _load_scene_config()
+TERRAIN_SIZE = int(_SCENE_CONFIG["terrain_size"])
+TILE_COUNT = int(_SCENE_CONFIG["tile_count"])
+SCENE_LAYOUT = _SCENE_CONFIG["scene_layout"]
 
 
 def _clamp(v, lo, hi):
@@ -162,19 +150,9 @@ ROAD_SEGMENTS = _road_segments()
 
 
 # Valley/hill shaping controls.
-_VALLEYS = [
-    (-108.0, -84.0, 58.0, 10.0),
-    (112.0, 82.0, 60.0, 9.6),
-]
+_VALLEYS = _SCENE_CONFIG["valleys"]
 
-_HILLS = [
-    (-150.0, -18.0, 50.0, 8.0),
-    (-48.0, -146.0, 44.0, 7.2),
-    (148.0, 22.0, 52.0, 8.4),
-    (42.0, 142.0, 45.0, 7.0),
-    (0.0, -178.0, 38.0, 6.2),
-    (0.0, 176.0, 36.0, 5.8),
-]
+_HILLS = _SCENE_CONFIG["hills"]
 
 
 def _gaussian_2d(x, y, cx, cy, sigma):

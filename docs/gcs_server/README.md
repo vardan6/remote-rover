@@ -7,7 +7,7 @@
 It is responsible for:
 - serving the dashboard UI
 - managing browser connections
-- letting one browser control the rover at a time
+- letting one focused dashboard browser control the rover at a time
 - publishing MQTT control frames
 - receiving telemetry and camera frames
 - relaying telemetry and video to browsers
@@ -19,7 +19,7 @@ Implemented today:
 - FastAPI backend
 - browser dashboard
 - WebSocket updates for telemetry, broker state, controller ownership, and video
-- single-controller locking
+- focus-driven single-controller activation
 - keyboard and on-screen browser controls
 - MQTT control publication
 - MQTT telemetry subscription
@@ -48,8 +48,8 @@ Current flow:
 1. browser loads the dashboard
 2. browser opens WebSocket to the GCS
 3. browser receives the current runtime snapshot
-4. browser may claim control
-5. while controlling, browser sends held-button state changes
+4. the focused and visible dashboard browser becomes active
+5. while focused and visible, browser sends held-button state changes
 6. GCS publishes control frames to MQTT
 7. telemetry and video received from MQTT are pushed back to all connected browsers
 
