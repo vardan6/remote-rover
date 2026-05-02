@@ -1,6 +1,7 @@
 # Remote Rover — Current Architecture And Implementation Plan
 
 > Historical architecture note.
+> Archived on: 2026-05-03
 > For the current documentation set, use:
 > - `docs/README.md`
 > - `docs/architecture.md`

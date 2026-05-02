@@ -20,9 +20,10 @@ print_native_venv_help() {
 
 ensure_native_python() {
     local py_bin="$1"
-    if ! "$py_bin" -c "import panda3d, p3dimgui, paho.mqtt.client" >/dev/null 2>&1; then
+    if ! "$py_bin" -c "import panda3d, p3dimgui, numpy, paho.mqtt.client" >/dev/null 2>&1; then
         echo "Installing missing simulator dependencies into the Linux environment..."
         "$py_bin" -m pip install -r "$DIR/requirements.txt"
+        "$py_bin" -m pip install --no-deps panda3d-imgui
     fi
 }
 

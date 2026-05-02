@@ -2,12 +2,37 @@
 
 ## Roadmap Summary
 
-The current system already works as an integrated prototype. The next work should focus on hardening and productization, not on basic end-to-end connectivity.
+Status basis date: 2026-05-03.
 
-## Priority 1: Stabilize The Existing MQTT Bootstrap Path
+The current `3d-env` + `gcs_server` system already works as an integrated prototype. The immediate next implementation priority is making `rover-sim-next` a working simulator backend that can operate with the existing GCS. Production hardening remains important, but it should follow the successor-backend integration milestone.
+
+## Priority 1: Make `rover-sim-next` A Working GCS-Compatible Backend
 
 Goal:
-- make the current working system reliable enough for repeatable demonstrations and internal use
+- turn the current `rover-sim-next/` scaffold into a runnable simulator backend without breaking `3d-env`
+
+Recommended work:
+- implement the real ROS 2/Gazebo launch path
+- add the first drivable rover model and loadable development world
+- bridge current GCS MQTT control payloads into simulator actuation
+- publish telemetry compatible with the current GCS and replay normalization layer
+- provide a first compatible camera path or explicit interim stream
+- carry backend identity, site origin, and coordinate settings through config and telemetry
+
+Success criteria:
+- `rover-sim-next` can be launched with one documented command
+- the existing GCS can drive and display rover state from `rover-sim-next`
+- `3d-env` remains runnable as the current working backend
+- no GCS-side protocol rewrite is required for the first milestone
+
+Detailed plan:
+- [Simulation Platform Plan](./simulation-platform-plan.md)
+- [rover-sim-next Phase 1 Checklist](./rover-sim-next-phase-1-checklist.md)
+
+## Priority 2: Stabilize The Existing MQTT Bootstrap Path
+
+Goal:
+- keep the current working system reliable enough for repeatable demonstrations and internal use while `rover-sim-next` is being built
 
 Recommended work:
 - verify simulator publish gating under broker reconnect and retained-message edge cases
@@ -21,7 +46,7 @@ Success criteria:
 - reconnect behavior is predictable and observable
 - dashboard freshness indicators reflect actual runtime conditions
 
-## Priority 2: Clarify Multi-GCS Policy
+## Priority 3: Clarify Multi-GCS Policy
 
 Goal:
 - define how more than one GCS should behave before introducing distributed deployment
@@ -36,7 +61,7 @@ Questions that should be settled explicitly:
 Recommended output:
 - one small design note that defines multi-GCS presence semantics and operator expectations
 
-## Priority 3: Replace In-Memory GCS State With Shared State
+## Priority 4: Replace In-Memory GCS State With Shared State
 
 Goal:
 - support multi-instance deployment and more robust coordination
@@ -51,7 +76,7 @@ Benefits:
 - removes single-process coordination limits
 - prepares the GCS for more realistic deployment
 
-## Priority 4: Upgrade The Media Path
+## Priority 5: Upgrade The Media Path
 
 Goal:
 - replace the current MQTT-frame bootstrap video path with a production-appropriate transport
@@ -69,7 +94,7 @@ Benefits:
 - better latency and scalability characteristics
 - cleaner separation between telemetry/control and media transport
 
-## Priority 5: Security And Access Control
+## Priority 6: Security And Access Control
 
 Goal:
 - add a real security boundary before broader use
@@ -80,7 +105,7 @@ Recommended work:
 - auditability for control claim and release actions
 - protection of configuration endpoints
 
-## Priority 6: Operational Hardening
+## Priority 7: Operational Hardening
 
 Goal:
 - make the system easier to run consistently across developer and demo environments
@@ -91,7 +116,7 @@ Recommended work:
 - add health and diagnostics notes for broker connectivity
 - define deployment assumptions for simulator-only mode versus future real-rover mode
 
-## Priority 7: Real Rover Adaptation Layer
+## Priority 8: Real Rover Adaptation Layer
 
 Goal:
 - make the architecture ready to support a real rover backend alongside the simulator
@@ -106,6 +131,6 @@ Recommended work:
 When presenting the roadmap, describe it this way:
 
 1. The prototype loop is already working.
-2. The next milestone is reliability and operational clarity.
-3. After that, the main production gaps are distributed state, media transport, and security.
-4. The current architecture is already split correctly, so the next work is mostly hardening and extension rather than restructuring.
+2. The next milestone is a working `rover-sim-next` backend beside the current `3d-env` simulator.
+3. After that, the main production gaps are distributed state, media transport, security, and deployment hardening.
+4. The current architecture is already split correctly, so the next work is implementation and hardening rather than repo restructuring.

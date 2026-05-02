@@ -1,6 +1,7 @@
 # Project Review And Current State
 
 > Historical review snapshot.
+> Archived on: 2026-05-03
 > For the current presentation-ready documentation set, start with:
 > - `docs/README.md`
 > - `docs/current-state.md`
@@ -98,7 +99,7 @@ Verified correct:
 - `remote-rover/3d-env/requirements.txt` contains simulator dependencies
 - `remote-rover/3d-env/simulator/terrain.py` defines deterministic dual-plant world layout and drivable road flattening
 - `remote-rover/3d-env/simulator/main.py` builds solar plants, operations building, roads, and updated decor placement
-- `remote-rover/gcs_server/GCS-web-app.md` exists with the GCS code
+- legacy `remote-rover/gcs_server/GCS-web-app.md` content is now archived under `docs/archive/gcs_server/`; current GCS docs live under `docs/gcs_server/`
 - root `.gitignore` excludes local editor/runtime state
 
 ## Useful Conclusions

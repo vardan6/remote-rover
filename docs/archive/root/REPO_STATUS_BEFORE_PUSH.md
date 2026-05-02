@@ -1,5 +1,9 @@
 # Repository Status Before First Push
 
+> Archived on: 2026-05-03
+> Reason: historical pre-push snapshot, superseded by canonical `docs/` set
+> Use now: `docs/README.md`, `docs/current-state.md`, `docs/architecture.md`, `docs/implementation-roadmap.md`
+
 ## Push Readiness Summary
 
 The `remote-rover/` repository is structurally ready to be initialized, added, committed, and pushed.
@@ -35,10 +39,10 @@ These are current implementation gaps:
 
 Primary docs to keep:
 - `README.md`
-- `PROJECT_REVIEW_AND_CURRENT_STATE.md`
-- `remote_rover_architecture_and_implementation_plan.md`
+- `docs/archive/root/PROJECT_REVIEW_AND_CURRENT_STATE.md`
+- `docs/archive/root/remote_rover_architecture_and_implementation_plan.md`
 - `gcs_server/README.md`
-- `gcs_server/GCS-web-app.md`
+- `docs/gcs_server/README.md`
 - `3d-env/mqtt-plan-canonical-2026-04-05_00-58-36.md`
 - `3d-env/phase1-3D-Simulator.md`
 - `3d-env/initial-hl-design.md`

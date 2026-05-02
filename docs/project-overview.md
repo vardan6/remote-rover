@@ -6,6 +6,8 @@ Remote Rover is a rover-control platform built around two working applications:
 - a 3D rover simulator that behaves like a remote vehicle
 - a browser-based Ground Control Station (GCS) that operators use to monitor and drive the rover
 
+The repository also contains `rover-sim-next/`, a scaffold for the planned ROS 2 + Gazebo successor simulator. That successor backend is not runnable yet.
+
 The system uses MQTT as its current integration backbone. The simulator publishes telemetry and camera frames, and the GCS publishes control commands from the browser.
 
 In its current state, the project already demonstrates the full operator loop:
@@ -70,6 +72,8 @@ Current demonstration value:
 - end-to-end remote control is implemented
 - end-to-end telemetry is implemented
 - end-to-end camera transport is implemented through an MQTT bootstrap path
+- GCS-side replay/session logging is implemented with a separate replay page and first map playback
+- the simulator and GCS share an explicit terrain scene manifest for world/map object data
 - simulator publishing can now be suppressed automatically when no GCS is active, which matters for bandwidth-sensitive environments
 - the codebase is already split into clear applications rather than a single mixed prototype tree
 
@@ -94,8 +98,15 @@ Working now:
 - shared configuration
 - GCS presence publishing
 - simulator-side telemetry gating based on active GCS presence
+- GCS replay/session storage
+- replay timeline and first map playback
+- shared explicit terrain scene manifest
 
 Still planned:
+- working `rover-sim-next` simulator backend
+- live map on the main dashboard
+- simulator-side logging
+- synchronized recorded video playback
 - production-grade video transport such as WebRTC
 - distributed shared state for multi-instance GCS deployments
 - authentication and authorization

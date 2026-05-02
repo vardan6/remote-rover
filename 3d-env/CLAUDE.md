@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > Full design reference: `initial-hl-design.md`
 > Phase 1 detail: `phase1-3D-Simulator.md`
 > Canonical Phase 2 MQTT plan: `mqtt-plan-canonical-2026-04-05_00-58-36.md`
-> Current project status: `../PROJECT_REVIEW_AND_CURRENT_STATE.md`
+> Current documentation entry point: `../docs/README.md`
 
 ## Project Overview
 
@@ -35,6 +35,11 @@ run.bat
 
 # Run from WSL through the Windows GPU env
 ./run_gpu.sh
+
+# Regenerate and validate the explicit terrain scene manifest
+cd ..
+python3 tools/generate_terrain_scene.py
+python3 tools/validate_terrain_scene.py
 ```
 
 ## Architecture
@@ -42,7 +47,10 @@ run.bat
 ### Simulator (`simulator/`)
 
 - **`main.py`** — Panda3D `ShowBase` entry point, game loop, MQTT arbitration, telemetry publication, and POV JPEG publication.
-- **`terrain.py`** — procedural heightmap terrain and Bullet collision mesh.
+- **`terrain.py`** — manifest-backed heightfield terrain, road coloring, and Bullet collision mesh.
+- **`../config/terrain_scene.v1.json`** — explicit terrain/object source of truth consumed by the simulator and GCS scene map.
+- **`../tools/generate_terrain_scene.py`** — transition generator from the legacy compact terrain seed.
+- **`../tools/validate_terrain_scene.py`** — terrain scene validation check.
 - **`rover.py`** — `BulletVehicle` rover implementation and drive model.
 - **`camera.py`** — follow cam + POV cam with offscreen buffer used for MQTT frame capture.
 - **`gui.py`** — telemetry HUD, top menu bar, and bottom status bar.
@@ -65,6 +73,7 @@ run.bat
 - Use **`panda3d.bullet`** rather than standalone `pybullet`.
 - Keep simulator UI-only settings in `simulator/settings.json`.
 - Keep shared runtime config in `../config/common.local.json` with the example file as fallback.
+- Do not hard-code terrain object names, coordinates, counts, or dimensions in runtime scripts; put terrain definition data in `../config/terrain_scene.v1.json`.
 
 ## Controls (simulator)
 

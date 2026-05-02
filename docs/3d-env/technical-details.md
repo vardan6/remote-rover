@@ -5,12 +5,27 @@
 The simulator is a Panda3D application centered on `simulator/main.py`.
 
 Important responsibilities inside the runtime:
-- build terrain and scene geometry
+- build terrain and scene geometry from `config/terrain_scene.v1.json`
 - create rover physics objects
 - merge local and MQTT control input
 - generate telemetry payloads
 - publish telemetry and camera frames through the MQTT bridge
 - expose menu and settings behavior
+
+## Terrain Scene Data
+
+Current terrain and static scene data are manifest-driven.
+
+Runtime source:
+- `config/terrain_scene.v1.json`
+
+Generator and validation:
+- `tools/generate_terrain_scene.py`
+- `tools/validate_terrain_scene.py`
+
+`simulator/terrain.py` reads the explicit heightfield and road definitions. `simulator/main.py` reads the explicit object list and creates boxes, ellipsoid rocks, compound trees, collision proxies, and the configured spawn point.
+
+The legacy compact file `config/terrain_scene.json` is only generator input during this transition. Runtime code should not use it directly.
 
 ## MQTT Integration
 
@@ -29,7 +44,7 @@ The simulator publishes telemetry payloads to:
 The payload currently includes:
 - timestamp
 - position
-- pseudo-GPS
+- deterministic virtual GPS derived from the terrain georeference
 - orientation
 - IMU placeholders and angular velocity
 - barometer altitude

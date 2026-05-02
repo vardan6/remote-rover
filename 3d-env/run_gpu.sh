@@ -90,10 +90,11 @@ fi
 
 # Fast path: direct Windows python via WSL interop.
 if "$WIN_VENV" -c "import sys" >/dev/null 2>&1; then
-    if ! "$WIN_VENV" -c "import panda3d, p3dimgui, imgui_bundle, paho.mqtt.client" >/dev/null 2>&1; then
+    if ! "$WIN_VENV" -c "import panda3d, p3dimgui, imgui_bundle, numpy, paho.mqtt.client" >/dev/null 2>&1; then
         echo "Installing missing simulator dependencies into .venv-gpu..."
         WIN_REQ="$(wslpath -w "$DIR/requirements.txt" 2>/dev/null || echo 'requirements.txt')"
         "$WIN_VENV" -m pip install -r "$WIN_REQ"
+        "$WIN_VENV" -m pip install --no-deps panda3d-imgui
     fi
     export ROVER_LAUNCH_PATH="wsl-windows-venv"
     exec "$WIN_VENV" simulator/main.py

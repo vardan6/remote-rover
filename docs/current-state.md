@@ -26,7 +26,7 @@ Implemented now:
 Implemented now:
 - the simulator publishes rover telemetry over MQTT
 - the GCS subscribes to telemetry and relays it to connected browser clients
-- the browser dashboard shows rover motion, heading, pseudo-GPS, camera mode, and power values
+- the browser dashboard shows rover motion, heading, deterministic virtual GPS, camera mode, and power values
 - the GCS tracks whether telemetry is fresh or stale
 - the GCS normalizes telemetry for replay/session storage
 
@@ -45,6 +45,7 @@ This is a bootstrap media path, not the final intended production media design.
 
 Implemented now:
 - a deterministic `400 x 400` terrain
+- explicit terrain/object source of truth at `config/terrain_scene.v1.json`
 - two solar plants placed in separate valleys
 - a central operations building
 - connecting roads and driveable corridors
@@ -199,6 +200,7 @@ You can show:
 - persistent GCS-side session logging
 - replay page with timeline and map playback
 - explicit backend identity for current and next simulator tracks
+- shared terrain scene manifest used by both the simulator and GCS scene-map payload
 
 That is enough to present the current system as a functioning integrated prototype with a clear path toward production hardening.
 

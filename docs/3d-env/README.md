@@ -67,6 +67,7 @@ For remote delivery, the simulator currently publishes POV JPEG frames over MQTT
 
 Current world includes:
 - a larger `400 x 400` terrain area
+- an explicit `config/terrain_scene.v1.json` terrain scene manifest
 - deterministic valley and hill shaping
 - two solar plant areas
 - one central operations building
@@ -75,13 +76,15 @@ Current world includes:
 
 This makes the simulator better suited for presentations and route-driving demonstrations than the earlier simple terrain.
 
+The simulator runtime reads terrain heightfield data, roads, spawn points, and static object definitions from the manifest. Object names, counts, coordinates, and dimensions should not be hard-coded in simulator scripts.
+
 ## Main Files
 
 - `simulator/main.py`: main runtime loop, telemetry generation, publish gating, integration
 - `simulator/mqtt_bridge.py`: MQTT client, control subscription, state publish, camera publish, GCS presence tracking
 - `simulator/gui.py`: menu bar, status bar, telemetry overlay
 - `simulator/settings_gui.py`: settings windows and persistence
-- `simulator/terrain.py`: terrain and world layout generation
+- `simulator/terrain.py`: manifest-backed terrain heightfield, visual mesh, road coloring, and Bullet collision mesh
 - `simulator/rover.py`: rover dynamics
 - `simulator/camera.py`: follow/POV camera handling and POV buffer capture
 

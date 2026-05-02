@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 
 
-SCENE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "terrain_scene.json"
+SCENE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "terrain_scene.v1.json"
 
 
 def _to_tuples(value):
@@ -25,10 +25,13 @@ def _load_scene_config():
     return _to_tuples(payload)
 
 
-_SCENE_CONFIG = _load_scene_config()
-TERRAIN_SIZE = int(_SCENE_CONFIG["terrain_size"])
-TILE_COUNT = int(_SCENE_CONFIG["tile_count"])
-SCENE_LAYOUT = _SCENE_CONFIG["scene_layout"]
+SCENE_MANIFEST = _load_scene_config()
+TERRAIN_SIZE = int(SCENE_MANIFEST["terrain"]["size"][0])
+TILE_COUNT = int(SCENE_MANIFEST["terrain"]["tile_count"])
+SCENE_OBJECTS = SCENE_MANIFEST["objects"]
+SPAWN_POINTS = SCENE_MANIFEST["spawn_points"]
+SCENE_ROADS = SCENE_MANIFEST["roads"]
+SCENE_GEOREFERENCE = SCENE_MANIFEST.get("coordinate_system", {}).get("georeference", {})
 
 
 def _clamp(v, lo, hi):
@@ -54,112 +57,6 @@ def _dist_point_to_segment(px, py, ax, ay, bx, by):
     cx = ax + t * abx
     cy = ay + t * aby
     return math.hypot(px - cx, py - cy), t
-
-
-def _rect_loop_points(cx, cy, hx, hy):
-    return [
-        (cx - hx, cy - hy),
-        (cx + hx, cy - hy),
-        (cx + hx, cy + hy),
-        (cx - hx, cy + hy),
-        (cx - hx, cy - hy),
-    ]
-
-
-def _polyline_segments(points):
-    return [(points[i], points[i + 1]) for i in range(len(points) - 1)]
-
-
-def _road_segments():
-    pa = SCENE_LAYOUT["plant_a"]
-    pb = SCENE_LAYOUT["plant_b"]
-    bld = SCENE_LAYOUT["building"]
-    hub = SCENE_LAYOUT["start_hub"]
-
-    loop_a = _rect_loop_points(*pa["center"], *pa["loop_half_extents"])
-    loop_b = _rect_loop_points(*pb["center"], *pb["loop_half_extents"])
-
-    connect_plants = [
-        (pa["center"][0], pa["center"][1] + pa["loop_half_extents"][1]),
-        (0.0, 36.0),
-        (pb["center"][0], pb["center"][1] - pb["loop_half_extents"][1]),
-    ]
-    connect_building_a = [
-        bld["center"],
-        (-46.0, -38.0),
-        (pa["center"][0] + pa["loop_half_extents"][0], pa["center"][1]),
-    ]
-    connect_building_b = [
-        bld["center"],
-        (44.0, 34.0),
-        (pb["center"][0] - pb["loop_half_extents"][0], pb["center"][1]),
-    ]
-    connect_start_hub = [
-        hub["center"],
-        (0.0, 8.0),
-        bld["center"],
-    ]
-
-    segments = []
-
-    for p0, p1 in _polyline_segments(loop_a):
-        segments.append((p0, p1, pa["floor_z"], pa["floor_z"]))
-    for p0, p1 in _polyline_segments(loop_b):
-        segments.append((p0, p1, pb["floor_z"], pb["floor_z"]))
-
-    plant_connector_nodes = [
-        (connect_plants[0], pa["floor_z"]),
-        (connect_plants[1], -2.3),
-        (connect_plants[2], pb["floor_z"]),
-    ]
-    for i in range(len(plant_connector_nodes) - 1):
-        (p0, z0) = plant_connector_nodes[i]
-        (p1, z1) = plant_connector_nodes[i + 1]
-        segments.append((p0, p1, z0, z1))
-
-    a_nodes = [
-        (connect_building_a[0], bld["floor_z"]),
-        (connect_building_a[1], -2.5),
-        (connect_building_a[2], pa["floor_z"]),
-    ]
-    b_nodes = [
-        (connect_building_b[0], bld["floor_z"]),
-        (connect_building_b[1], -2.2),
-        (connect_building_b[2], pb["floor_z"]),
-    ]
-    for nodes in (a_nodes, b_nodes):
-        for i in range(len(nodes) - 1):
-            (p0, z0) = nodes[i]
-            (p1, z1) = nodes[i + 1]
-            segments.append((p0, p1, z0, z1))
-
-    hub_nodes = [
-        (connect_start_hub[0], hub["floor_z"]),
-        (connect_start_hub[1], -1.2),
-        (connect_start_hub[2], bld["floor_z"]),
-    ]
-    for i in range(len(hub_nodes) - 1):
-        (p0, z0) = hub_nodes[i]
-        (p1, z1) = hub_nodes[i + 1]
-        segments.append((p0, p1, z0, z1))
-
-    return segments
-
-
-ROAD_SEGMENTS = _road_segments()
-
-
-# Valley/hill shaping controls.
-_VALLEYS = _SCENE_CONFIG["valleys"]
-
-_HILLS = _SCENE_CONFIG["hills"]
-
-
-def _gaussian_2d(x, y, cx, cy, sigma):
-    dx = x - cx
-    dy = y - cy
-    d2 = dx * dx + dy * dy
-    return math.exp(-d2 / (2.0 * sigma * sigma))
 
 
 def _mix3(a, b, t):
@@ -204,98 +101,18 @@ def _terrain_color(x, y, h, slope_mag, road_mix):
     return col
 
 
-def _base_height(x, y):
-    xn = x / TERRAIN_SIZE
-    yn = y / TERRAIN_SIZE
-
-    h = 0.0
-    h += math.sin(xn * 7.0 + 0.8) * math.cos(yn * 5.8 - 0.6) * 1.7
-    h += math.sin(xn * 13.0 + 2.1) * math.cos(yn * 11.2 + 0.9) * 1.3
-    h += math.sin(xn * 24.0 - 1.0) * math.sin(yn * 21.4 + 0.4) * 0.55
-
-    for cx, cy, sigma, amp in _VALLEYS:
-        h -= amp * _gaussian_2d(x, y, cx, cy, sigma)
-
-    for cx, cy, sigma, amp in _HILLS:
-        h += amp * _gaussian_2d(x, y, cx, cy, sigma)
-
-    return h
-
-
-def _apply_flatten_pads(x, y, h):
-    specs = [
-        SCENE_LAYOUT["plant_a"],
-        SCENE_LAYOUT["plant_b"],
-        SCENE_LAYOUT["building"],
-        SCENE_LAYOUT["start_hub"],
-    ]
-    for spec in specs:
-        cx, cy = spec["center"]
-        hx, hy = spec["pad_half_extents"]
-        nx = (x - cx) / max(1e-5, hx)
-        ny = (y - cy) / max(1e-5, hy)
-        d = math.sqrt(nx * nx + ny * ny)
-        inner = _smoothstep(1.15, 0.80, d)
-        if inner > 0.0:
-            h = h * (1.0 - inner) + spec["floor_z"] * inner
-
-        # Optional wider apron around a pad to reduce abrupt slopes nearby.
-        sh = spec.get("surround_half_extents")
-        if sh:
-            shx, shy = sh
-            snx = (x - cx) / max(1e-5, shx)
-            sny = (y - cy) / max(1e-5, shy)
-            sd = math.sqrt(snx * snx + sny * sny)
-            surround = _smoothstep(1.28, 0.82, sd)
-            if surround > 0.0:
-                h = h * (1.0 - surround * 0.82) + spec["floor_z"] * (surround * 0.82)
-    return h
-
-
-def _apply_flatten_roads(x, y, h):
-    road_width = SCENE_LAYOUT["roads"]["width"]
-    feather = SCENE_LAYOUT["roads"]["feather"]
-
-    best_dist = 1e9
-    best_target = h
-    for (p0, p1, z0, z1) in ROAD_SEGMENTS:
-        dist, t = _dist_point_to_segment(x, y, p0[0], p0[1], p1[0], p1[1])
-        if dist < best_dist:
-            best_dist = dist
-            best_target = z0 + (z1 - z0) * t
-
-    blend = _smoothstep(feather, road_width, best_dist)
-    if blend > 0.0:
-        h = h * (1.0 - blend * 0.92) + best_target * (blend * 0.92)
-    return h
-
-
 def _build_heightmap():
-    n = TILE_COUNT
-    hmap = []
-    for row in range(n):
-        r = []
-        y = (row / (n - 1)) * TERRAIN_SIZE - TERRAIN_SIZE / 2.0
-        for col in range(n):
-            x = (col / (n - 1)) * TERRAIN_SIZE - TERRAIN_SIZE / 2.0
-
-            h = _base_height(x, y)
-            h = _apply_flatten_pads(x, y, h)
-            h = _apply_flatten_roads(x, y, h)
-            r.append(h)
-        hmap.append(r)
-    return hmap
+    return [list(row) for row in SCENE_MANIFEST["terrain"]["heightfield"]]
 
 
 def _road_mask_strength(x, y):
-    road_width = SCENE_LAYOUT["roads"]["width"]
-    feather = SCENE_LAYOUT["roads"]["feather"]
-    best_dist = 1e9
-    for (p0, p1, _z0, _z1) in ROAD_SEGMENTS:
+    best_mix = 0.0
+    for road in SCENE_ROADS:
+        p0, p1 = road["centerline"]
         dist, _ = _dist_point_to_segment(x, y, p0[0], p0[1], p1[0], p1[1])
-        if dist < best_dist:
-            best_dist = dist
-    return _smoothstep(feather, road_width, best_dist)
+        geom = road["geometry"]
+        best_mix = max(best_mix, _smoothstep(geom["feather"], geom["width"], dist))
+    return best_mix
 
 
 def _build_geom(hmap):

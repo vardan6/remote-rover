@@ -12,9 +12,9 @@
 >
 > Use these current documents instead:
 > - `../README.md`
-> - `../remote_rover_architecture_and_implementation_plan.md`
-> - `../PROJECT_REVIEW_AND_CURRENT_STATE.md`
-> - `../gcs_server/GCS-web-app.md`
+> - `../docs/architecture.md`
+> - `../docs/current-state.md`
+> - `../docs/gcs_server/README.md`
 > - `mqtt-plan-canonical-2026-04-05_00-58-36.md`
 > - `phase1-3D-Simulator.md`
 

@@ -50,6 +50,9 @@ def save_settings(cfg, path=None):
             "key_bindings": copy.deepcopy(cfg.get("key_bindings", {})),
             "video": copy.deepcopy(cfg.get("video", {})),
             "gcs": copy.deepcopy(cfg.get("gcs", {})),
+            "simulation": copy.deepcopy(cfg.get("simulation", {})),
+            "logging": copy.deepcopy(cfg.get("logging", {})),
+            "map": copy.deepcopy(cfg.get("map", {})),
         }
         _write_json(_COMMON_LOCAL_PATH, shared_payload)
         print(f"[Settings] Saved simulator settings to {path}")

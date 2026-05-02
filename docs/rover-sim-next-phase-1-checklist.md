@@ -2,6 +2,8 @@
 
 ## Purpose
 
+Status snapshot date: 2026-05-03.
+
 This checklist turns the `rover-sim-next` plan into a concrete first implementation scope.
 
 Phase 1 goal:

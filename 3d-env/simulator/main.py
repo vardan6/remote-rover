@@ -59,10 +59,11 @@ from panda3d.core import (GeomNode, Geom, GeomTriangles, GeomVertexData,
 import math
 import random
 
-from terrain import Terrain, TERRAIN_SIZE, SCENE_LAYOUT, ROAD_SEGMENTS
+from terrain import Terrain, SCENE_OBJECTS, SPAWN_POINTS, SCENE_GEOREFERENCE
 from rover import Rover
 from camera import CameraController
 from gui import TelemetryGUI, MenuBar, StatusBar, apply_imgui_theme
+from georeference import local_to_gps, normalize_georeference
 from imgui_style import normalize_ui_config
 from settings import load_settings, save_settings
 from settings_gui import SettingsDialog
@@ -174,6 +175,7 @@ class RoverSimulator(ShowBase):
         # Load settings first
         self._cfg = load_settings()
         self._mqtt_cfg = self._cfg.get("mqtt", {})
+        self._georeference = normalize_georeference(SCENE_GEOREFERENCE)
         self._last_video_pub_mono = 0.0
         self._gpu_preference = _GPU_PREFLIGHT["preference"]
 
@@ -403,10 +405,11 @@ class RoverSimulator(ShowBase):
         self.terrain.np.hide(BitMask32.allOn())
         self.terrain.np.show(main_mask)
 
-        spawn_x, spawn_y = SCENE_LAYOUT["spawn"]["xy"]
-        self._spawn_point = (spawn_x, spawn_y, self.terrain.height_at(spawn_x, spawn_y) + 2.2)
+        spawn_pose = SPAWN_POINTS[0]["pose"]["position"]
+        self._spawn_point = tuple(spawn_pose)
         self.rover = Rover(self.render, self.bullet_world, start_pos=self._spawn_point)
 
+        self._scene_object_nps = []
         self._solar_nps = []
         self._building_nps = []
         self._hub_nps = []
@@ -414,39 +417,12 @@ class RoverSimulator(ShowBase):
         self._tree_nps = []
         self._obstacle_footprints = []
 
-        self._register_road_keepout()
-        self._create_solar_plants(main_mask)
-        self._create_operations_building(main_mask)
-        self._create_start_hub(main_mask)
-        self._create_stones(main_mask)
-        self._create_trees(main_mask)
+        self._create_scene_objects(main_mask)
 
         self._flip_timer   = 0.0
 
         self.cam_ctrl = CameraController(self, self.rover)
         self.gui      = TelemetryGUI()
-
-    def _register_keepout(self, x, y, radius):
-        self._obstacle_footprints.append((x, y, radius))
-
-    def _register_road_keepout(self):
-        road_w = SCENE_LAYOUT["roads"]["width"] + 1.5
-        step = max(4.0, road_w * 0.85)
-        for (p0, p1, _z0, _z1) in ROAD_SEGMENTS:
-            dx = p1[0] - p0[0]
-            dy = p1[1] - p0[1]
-            seg_len = math.sqrt(dx * dx + dy * dy)
-            samples = max(2, int(seg_len / step))
-            for i in range(samples + 1):
-                t = i / samples
-                sx = p0[0] + dx * t
-                sy = p0[1] + dy * t
-                self._register_keepout(sx, sy, road_w)
-
-        for key in ("plant_a", "plant_b", "building", "start_hub"):
-            spec = SCENE_LAYOUT[key]
-            hx, hy = spec["pad_half_extents"]
-            self._register_keepout(spec["center"][0], spec["center"][1], math.sqrt(hx * hx + hy * hy) + 3.0)
 
     def _add_static_box_collider(self, name, x, y, z, hx, hy, hz):
         body = BulletRigidBodyNode(name)
@@ -459,325 +435,109 @@ class RoverSimulator(ShowBase):
         self.bullet_world.attachRigidBody(body)
         return body_np
 
-    def _create_solar_plants(self, main_mask):
-        for idx, key in enumerate(("plant_a", "plant_b")):
-            spec = SCENE_LAYOUT[key]
-            cx, cy = spec["center"]
-            hx, hy = spec["pad_half_extents"]
-            floor_z = spec["floor_z"]
+    def _object_bucket(self, kind):
+        if kind in ("solar_frame", "solar_panel", "pad"):
+            return self._solar_nps
+        if kind == "building":
+            return self._building_nps
+        if kind in ("charger", "guard_rail"):
+            return self._hub_nps
+        if kind in ("stone", "boulder"):
+            return self._stone_nps
+        if kind == "tree":
+            return self._tree_nps
+        return self._scene_object_nps
 
-            pad = self.render.attachNewNode(_build_box_node(f"{key}_pad", hx, hy, 0.18, (0.28, 0.29, 0.30)))
-            pad.setPos(cx, cy, floor_z + 0.18)
-            pad.setTwoSided(True)
-            pad.hide(BitMask32.allOn())
-            pad.show(main_mask)
-            self._solar_nps.append(pad)
+    def _create_box_object(self, spec, main_mask):
+        meta = spec.get("metadata", {})
+        geom = spec["geometry"]
+        pose = spec["pose"]
+        pos = pose["position"]
+        hpr = pose["rotation_euler_deg"]
+        hx, hy, hz = geom["half_extents"]
 
-            rows = 8
-            cols = 8
-            sx = (hx * 1.70) / (cols - 1)
-            sy = (hy * 1.60) / (rows - 1)
-            heading = 20 if idx == 0 else -18
+        if spec.get("collision") and (meta.get("visible") is False or spec["kind"] == "collision_proxy"):
+            np = self._add_static_box_collider(spec["id"], pos[0], pos[1], pos[2], hx, hy, hz)
+            self._object_bucket(spec["kind"]).append(np)
+            return
 
-            for r in range(rows):
-                for c in range(cols):
-                    px = cx - hx * 0.85 + c * sx
-                    py = cy - hy * 0.80 + r * sy
-                    pz = self.terrain.height_at(px, py) + 0.86
+        color = spec.get("material", {}).get("base_color", [0.6, 0.6, 0.6])
+        np = self.render.attachNewNode(_build_box_node(spec["id"], hx, hy, hz, color))
+        np.setPos(*pos)
+        np.setHpr(*hpr)
+        np.setTwoSided(True)
+        np.hide(BitMask32.allOn())
+        np.show(main_mask)
+        self._object_bucket(spec["kind"]).append(np)
 
-                    frame_gn = _build_box_node(f"{key}_frame_{r}_{c}", 1.35, 0.08, 0.34, (0.60, 0.62, 0.65))
-                    frame_np = self.render.attachNewNode(frame_gn)
-                    frame_np.setPos(px, py, pz)
-                    frame_np.setHpr(heading, 0, 0)
-                    frame_np.setTwoSided(True)
-                    frame_np.hide(BitMask32.allOn())
-                    frame_np.show(main_mask)
+    def _create_ellipsoid_body_object(self, spec, main_mask):
+        geom = spec["geometry"]
+        pose = spec["pose"]
+        pos = pose["position"]
+        hpr = pose["rotation_euler_deg"]
+        rx, ry, rz = geom["radii"]
+        collision = spec.get("collision", {})
+        radius = collision.get("radius", max(rx, ry, rz))
 
-                    panel_gn = _build_box_node(f"{key}_panel_{r}_{c}", 1.35, 0.95, 0.035, (0.08, 0.14, 0.24))
-                    panel_np = self.render.attachNewNode(panel_gn)
-                    panel_np.setPos(px, py, pz + 0.42)
-                    panel_np.setHpr(heading, 22, 0)
-                    panel_np.setTwoSided(True)
-                    panel_np.hide(BitMask32.allOn())
-                    panel_np.show(main_mask)
-                    self._solar_nps.extend((frame_np, panel_np))
+        node = BulletRigidBodyNode(spec["id"])
+        node.addShape(BulletSphereShape(radius))
+        node.setMass(0)
+        body_np = self.render.attachNewNode(node)
+        body_np.setPos(*pos)
+        body_np.setHpr(*hpr)
+        self.bullet_world.attachRigidBody(node)
 
-            collider_np = self._add_static_box_collider(
-                f"{key}_collider",
-                cx,
-                cy,
-                floor_z + 1.2,
-                hx * 0.98,
-                hy * 0.98,
-                1.2,
-            )
-            self._solar_nps.append(collider_np)
+        material = spec.get("material", {})
+        rock_np = body_np.attachNewNode(_build_rock_node(
+            f"{spec['id']}_visual",
+            rx,
+            ry,
+            rz,
+            seed=int(geom.get("seed", 0)),
+            base_col=tuple(material.get("base_color", [0.44, 0.40, 0.35])),
+            jitter=float(material.get("jitter", 0.07)),
+        ))
+        rock_np.setTwoSided(True)
+        rock_np.hide(BitMask32.allOn())
+        rock_np.show(main_mask)
+        self._object_bucket(spec["kind"]).append(rock_np)
 
-    def _create_operations_building(self, main_mask):
-        spec = SCENE_LAYOUT["building"]
-        cx, cy = spec["center"]
-        hx, hy = spec["pad_half_extents"]
-        floor_z = spec["floor_z"]
+    def _create_compound_object(self, spec, main_mask):
+        pose = spec["pose"]
+        parent = self.render.attachNewNode(spec["id"])
+        parent.setPos(*pose["position"])
+        parent.setHpr(*pose["rotation_euler_deg"])
 
-        pad = self.render.attachNewNode(_build_box_node("building_pad", hx, hy, 0.24, (0.38, 0.37, 0.34)))
-        pad.setPos(cx, cy, floor_z + 0.24)
-        pad.setTwoSided(True)
-        pad.hide(BitMask32.allOn())
-        pad.show(main_mask)
-        self._building_nps.append(pad)
-
-        base = self.render.attachNewNode(_build_box_node("ops_building_base", 8.0, 5.5, 2.8, (0.74, 0.74, 0.70)))
-        base.setPos(cx, cy, floor_z + 2.8)
-        base.setTwoSided(True)
-        base.hide(BitMask32.allOn())
-        base.show(main_mask)
-        self._building_nps.append(base)
-
-        roof = self.render.attachNewNode(_build_box_node("ops_building_roof", 8.5, 6.0, 0.26, (0.22, 0.23, 0.24)))
-        roof.setPos(cx, cy, floor_z + 5.9)
-        roof.setTwoSided(True)
-        roof.hide(BitMask32.allOn())
-        roof.show(main_mask)
-        self._building_nps.append(roof)
-
-        collider_np = self._add_static_box_collider(
-            "ops_building_collider",
-            cx,
-            cy,
-            floor_z + 2.9,
-            8.2,
-            5.8,
-            2.9,
-        )
-        self._building_nps.append(collider_np)
-
-    def _create_start_hub(self, main_mask):
-        spec = SCENE_LAYOUT["start_hub"]
-        cx, cy = spec["center"]
-        hx, hy = spec["pad_half_extents"]
-        floor_z = spec["floor_z"]
-
-        pad = self.render.attachNewNode(_build_box_node("start_hub_pad", hx, hy, 0.22, (0.52, 0.53, 0.54)))
-        pad.setPos(cx, cy, floor_z + 0.22)
-        pad.setTwoSided(True)
-        pad.hide(BitMask32.allOn())
-        pad.show(main_mask)
-        self._hub_nps.append(pad)
-
-        pad_collider = self._add_static_box_collider(
-            "start_hub_pad_collider",
-            cx,
-            cy,
-            floor_z + 0.22,
-            hx,
-            hy,
-            0.22,
-        )
-        self._hub_nps.append(pad_collider)
-
-        charger_base = self.render.attachNewNode(
-            _build_box_node("charger_base", 1.15, 0.72, 0.30, (0.28, 0.30, 0.33))
-        )
-        charger_base.setPos(cx + 8.4, cy - 5.4, floor_z + 0.30)
-        charger_base.setTwoSided(True)
-        charger_base.hide(BitMask32.allOn())
-        charger_base.show(main_mask)
-        self._hub_nps.append(charger_base)
-
-        charger_post = self.render.attachNewNode(
-            _build_box_node("charger_post", 0.22, 0.22, 1.15, (0.70, 0.72, 0.74))
-        )
-        charger_post.setPos(cx + 8.4, cy - 5.4, floor_z + 1.45)
-        charger_post.setTwoSided(True)
-        charger_post.hide(BitMask32.allOn())
-        charger_post.show(main_mask)
-        self._hub_nps.append(charger_post)
-
-        charger_head = self.render.attachNewNode(
-            _build_box_node("charger_head", 0.36, 0.20, 0.18, (0.19, 0.52, 0.36))
-        )
-        charger_head.setPos(cx + 8.4, cy - 5.2, floor_z + 2.38)
-        charger_head.setTwoSided(True)
-        charger_head.hide(BitMask32.allOn())
-        charger_head.show(main_mask)
-        self._hub_nps.append(charger_head)
-
-        rail = self.render.attachNewNode(_build_box_node("hub_guard_rail", 0.12, 4.1, 0.42, (0.78, 0.79, 0.80)))
-        rail.setPos(cx + hx - 0.8, cy, floor_z + 0.42)
-        rail.setTwoSided(True)
-        rail.hide(BitMask32.allOn())
-        rail.show(main_mask)
-        self._hub_nps.append(rail)
-
-        charger_collider = self._add_static_box_collider(
-            "charger_collider",
-            cx + 8.4,
-            cy - 5.4,
-            floor_z + 0.95,
-            0.85,
-            0.55,
-            0.95,
-        )
-        self._hub_nps.append(charger_collider)
-
-    # ── Stone obstacle creation ───────────────────────────────────────────────
-    def _create_stones(self, main_mask):
-        rng = random.Random(42)
-        small_stones  = 42
-        big_boulders  = 18
-        total_stones  = small_stones + big_boulders
-        placed = 0
-        attempts = 0
-
-        spawn_half_extent = TERRAIN_SIZE * 0.46
-        spawn_clear_radius = 18.0
-
-        while placed < total_stones and attempts < 2600:
-            attempts += 1
-            # Random position on terrain, keep a clear zone around rover start
-            px = rng.uniform(-spawn_half_extent, spawn_half_extent)
-            py = rng.uniform(-spawn_half_extent, spawn_half_extent)
-            dxs = px - self._spawn_point[0]
-            dys = py - self._spawn_point[1]
-            if math.sqrt(dxs * dxs + dys * dys) < spawn_clear_radius:
+        for part in spec["geometry"].get("parts", []):
+            if part["type"] != "ellipsoid":
                 continue
+            rx, ry, rz = part["radii"]
+            material = part.get("material", {})
+            part_np = parent.attachNewNode(_build_rock_node(
+                f"{spec['id']}_{part['id']}",
+                rx,
+                ry,
+                rz,
+                seed=int(part.get("seed", 0)),
+                base_col=tuple(material.get("base_color", [0.4, 0.4, 0.4])),
+                jitter=float(material.get("jitter", 0.05)),
+            ))
+            part_np.setPos(*part.get("local_position", [0.0, 0.0, 0.0]))
+            part_np.setTwoSided(True)
 
-            is_big = placed >= small_stones
-            if is_big:
-                radius = rng.uniform(1.15, 2.20)
-                rx = radius * rng.uniform(0.95, 1.55)
-                ry = radius * rng.uniform(0.95, 1.55)
-                rz = radius * rng.uniform(0.70, 1.20)
-            else:
-                radius = rng.uniform(0.45, 1.20)
-                rx = radius * rng.uniform(0.80, 1.45)
-                ry = radius * rng.uniform(0.80, 1.45)
-                rz = radius * rng.uniform(0.60, 1.05)
+        parent.hide(BitMask32.allOn())
+        parent.show(main_mask)
+        self._object_bucket(spec["kind"]).append(parent)
 
-            # Keep obstacles from intersecting each other too heavily.
-            footprint_radius = max(radius, rx, ry) * (1.18 if is_big else 1.05)
-            if not self._is_obstacle_clear(px, py, footprint_radius):
-                continue
-
-            terrain_z = self.terrain.height_at(px, py)
-            stone_z = terrain_z + rz * (0.55 if is_big else 0.60)
-
-            # Physics: static sphere (mass=0)
-            shape = BulletSphereShape(radius)
-            tag = "boulder" if is_big else "stone"
-            node = BulletRigidBodyNode(f"{tag}_{placed}")
-            node.addShape(shape)
-            node.setMass(0)
-            stone_np = self.render.attachNewNode(node)
-            stone_np.setPos(px, py, stone_z)
-            stone_np.setHpr(
-                rng.uniform(0, 360),
-                rng.uniform(-15, 15),
-                rng.uniform(-15, 15)
-            )
-            self.bullet_world.attachRigidBody(node)
-
-            # Visual mesh
-            if is_big:
-                rock_color = (0.39, 0.36, 0.33)
-                color_jitter = 0.09
-            else:
-                rock_color = (0.44, 0.40, 0.35)
-                color_jitter = 0.07
-            rock_gn = _build_rock_node(
-                f"rock_{placed}",
-                rx, ry, rz,
-                seed=placed,
-                base_col=rock_color,
-                jitter=color_jitter,
-            )
-            rock_np = stone_np.attachNewNode(rock_gn)
-            rock_np.setTwoSided(True)
-            rock_np.hide(BitMask32.allOn())
-            rock_np.show(main_mask)
-            self._stone_nps.append(rock_np)
-            self._obstacle_footprints.append((px, py, footprint_radius))
-
-            placed += 1
-
-    # ── Tree decoration ────────────────────────────────────────────────────────
-    def _create_trees(self, main_mask):
-        rng = random.Random(314)
-        num_trees = 28
-        placed = 0
-        attempts = 0
-
-        spawn_half_extent = TERRAIN_SIZE * 0.47
-        spawn_clear_radius = 20.0
-
-        while placed < num_trees and attempts < 2400:
-            attempts += 1
-            px = rng.uniform(-spawn_half_extent, spawn_half_extent)
-            py = rng.uniform(-spawn_half_extent, spawn_half_extent)
-            dxs = px - self._spawn_point[0]
-            dys = py - self._spawn_point[1]
-            if math.sqrt(dxs * dxs + dys * dys) < spawn_clear_radius:
-                continue
-
-            trunk_r = rng.uniform(0.24, 0.40)
-            trunk_h = rng.uniform(1.9, 3.4)
-            canopy_r = rng.uniform(1.25, 2.65)
-            footprint_radius = max(trunk_r * 1.6, canopy_r * 0.55)
-
-            if not self._is_obstacle_clear(px, py, footprint_radius):
-                continue
-
-            terrain_z = self.terrain.height_at(px, py)
-            tree_np = self.render.attachNewNode(f"tree_{placed}")
-            tree_np.setPos(px, py, terrain_z)
-            tree_np.setHpr(
-                rng.uniform(0, 360),
-                rng.uniform(-3, 3),
-                rng.uniform(-3, 3)
-            )
-
-            trunk_rx = trunk_r * rng.uniform(0.85, 1.18)
-            trunk_ry = trunk_r * rng.uniform(0.85, 1.18)
-            trunk_rz = trunk_h * 0.5
-            trunk_gn = _build_rock_node(
-                f"tree_trunk_{placed}",
-                trunk_rx, trunk_ry, trunk_rz,
-                seed=5000 + placed,
-                base_col=(0.32, 0.23, 0.13),
-                jitter=0.04,
-            )
-            trunk_np = tree_np.attachNewNode(trunk_gn)
-            trunk_np.setZ(trunk_rz * 0.95)
-            trunk_np.setTwoSided(True)
-
-            canopy_rx = canopy_r * rng.uniform(0.80, 1.18)
-            canopy_ry = canopy_r * rng.uniform(0.80, 1.18)
-            canopy_rz = canopy_r * rng.uniform(0.72, 1.08)
-            canopy_gn = _build_rock_node(
-                f"tree_canopy_{placed}",
-                canopy_rx, canopy_ry, canopy_rz,
-                seed=7000 + placed,
-                base_col=(0.19, 0.45, 0.17),
-                jitter=0.06,
-            )
-            canopy_np = tree_np.attachNewNode(canopy_gn)
-            canopy_np.setZ(trunk_h + canopy_rz * 0.22)
-            canopy_np.setTwoSided(True)
-
-            tree_np.hide(BitMask32.allOn())
-            tree_np.show(main_mask)
-            self._tree_nps.append(tree_np)
-            self._obstacle_footprints.append((px, py, footprint_radius))
-            placed += 1
-
-    def _is_obstacle_clear(self, x, y, radius):
-        for ox, oy, rr in self._obstacle_footprints:
-            dx = x - ox
-            dy = y - oy
-            min_dist = radius + rr
-            if dx * dx + dy * dy < min_dist * min_dist:
-                return False
-        return True
+    def _create_scene_objects(self, main_mask):
+        for spec in SCENE_OBJECTS:
+            geom_type = spec["geometry"]["type"]
+            if geom_type == "box":
+                self._create_box_object(spec, main_mask)
+            elif geom_type == "ellipsoid":
+                self._create_ellipsoid_body_object(spec, main_mask)
+            elif geom_type == "compound":
+                self._create_compound_object(spec, main_mask)
 
     def _reset_rover(self):
         """Teleport rover back to spawn with zeroed velocity (called after flip)."""
@@ -1064,17 +824,14 @@ class RoverSimulator(ShowBase):
             linear_v = node.get_linear_velocity()
             angular_v = node.get_angular_velocity()
 
-        # Simple local-map projection from world meters to pseudo GPS degrees.
-        base_lat = 40.1700
-        base_lon = 44.5000
-        lat = base_lat + (pos.y / 111320.0)
-        lon = base_lon + (pos.x / (111320.0 * max(0.1, math.cos(math.radians(base_lat)))))
+        gps = local_to_gps(pos, self._georeference)
 
         mqtt_cfg = self._cfg.get("mqtt", {})
         return {
             "timestamp": time.time(),
             "position": {"x": pos.x, "y": pos.y, "z": pos.z},
-            "gps": {"lat": lat, "lon": lon, "alt": pos.z},
+            "gps": gps,
+            "georeference": self._georeference,
             "orientation": {
                 "heading_deg": heading,
                 "hpr_deg": {"h": hpr.x, "p": hpr.y, "r": hpr.z},

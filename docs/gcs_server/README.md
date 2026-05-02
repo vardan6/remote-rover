@@ -26,6 +26,7 @@ Implemented today:
 - MQTT camera-frame subscription
 - MQTT setup page with live reconfiguration
 - periodic and event-driven GCS presence publication
+- replay scene-map payload generated from the shared terrain scene manifest
 
 ## Presence And Telemetry Enablement
 
@@ -63,6 +64,7 @@ Current flow:
 ## Main Files
 
 - `app.py`: FastAPI routes and WebSocket endpoint
+- `scene_map.py`: replay scene-map payload from `config/terrain_scene.v1.json`
 - `runtime.py`: service assembly and reconfiguration
 - `mqtt_service.py`: MQTT connection, subscriptions, control publish, presence publish
 - `control.py`: held-button control loop

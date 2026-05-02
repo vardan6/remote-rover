@@ -1,3 +1,5 @@
 panda3d
-panda3d-imgui
+imgui-bundle>=1.92.700,<1.93
+numpy
 paho-mqtt
+pyperclip

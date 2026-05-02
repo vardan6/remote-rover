@@ -8,6 +8,8 @@ Repository root:
 Main subprojects:
 - `3d-env/`
 - `gcs_server/`
+- `rover-sim-next/`
+- `tools/`
 - `config/`
 - `docs/`
 
@@ -25,6 +27,29 @@ Current shared config covers:
 - GCS presence topic and timeout
 - video mode defaults
 - GCS host and port
+
+## Terrain Scene Manifest
+
+Terrain and static world-object data live in:
+- `config/terrain_scene.v1.json`
+
+This manifest is consumed by:
+- `3d-env/simulator/terrain.py`
+- `3d-env/simulator/main.py`
+- `gcs_server/scene_map.py`
+
+The manifest contains explicit final objects and terrain data. Runtime scripts should not hard-code terrain object names, object counts, coordinates, or dimensions.
+
+Regenerate and validate it from the repository root when terrain definitions change:
+
+```bash
+cd /mnt/c/Users/vardana/Documents/Proj/remote-rover
+python3 tools/generate_terrain_scene.py
+python3 tools/validate_terrain_scene.py
+```
+
+Detailed manifest notes:
+- [Terrain Scene Manifest](../terrain-scene.md)
 
 Important rule:
 - keep real environment-specific values only in `config/common.local.json`
@@ -118,6 +143,12 @@ Alternative helper:
 cd /mnt/c/Users/vardana/Documents/Proj/remote-rover/gcs_server
 ./run.sh
 ```
+
+## Running `rover-sim-next`
+
+`rover-sim-next/` is currently a scaffold, not a runnable replacement simulator.
+
+Use `3d-env/` for the current working simulator until the ROS 2 + Gazebo successor path has a supported launch flow.
 
 ## Current Operational Sequence
 

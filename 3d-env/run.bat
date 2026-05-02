@@ -13,7 +13,7 @@ if /I "%ROVER_GPU_PREFERENCE%"=="nvidia" (
         echo [GPU-LAUNCH] NVIDIA detected. Launching Windows GPU environment.
     )
 )
-if not exist ".\.venv-gpu\Scripts\python.exe" goto :missing_venv
+call :ensure_venv || goto :fail
 
 :: ── Optimus / dual-GPU fix ──────────────────────────────────────────────────
 :: Panda3D uses WGL (legacy OpenGL). NVIDIA Optimus routes WGL to the discrete
@@ -42,22 +42,35 @@ if /I "%ROVER_GPU_PREFERENCE%"=="nvidia" (
         echo [GPU-LAUNCH] or set python.exe to High Performance in NVIDIA Control Panel.
     )
 )
-.\.venv-gpu\Scripts\python.exe -c "import panda3d, p3dimgui, imgui_bundle, paho.mqtt.client" >nul 2>nul
+.\.venv-gpu\Scripts\python.exe -c "import panda3d, p3dimgui, imgui_bundle, numpy, paho.mqtt.client" >nul 2>nul
 if errorlevel 1 (
     echo Installing missing simulator dependencies into .venv-gpu...
-    .\.venv-gpu\Scripts\python.exe -m pip install -r requirements.txt || goto :fail
+    call :install_deps || goto :fail
 )
 .venv-gpu\Scripts\python.exe simulator\main.py
 pause
 goto :eof
 
-:missing_venv
-echo Windows GPU venv not found at .venv-gpu\
-echo.
-echo Create it from this directory in Command Prompt or PowerShell:
-echo   python -m venv .venv-gpu
-echo   .venv-gpu\Scripts\python -m pip install -r requirements.txt
-pause
+:ensure_venv
+if not defined ROVER_PYTHON set "ROVER_PYTHON=python"
+
+if exist ".\.venv-gpu\Scripts\python.exe" (
+    .\.venv-gpu\Scripts\python.exe -c "import sys" >nul 2>nul
+    if errorlevel 1 (
+        echo [GPU-LAUNCH] Existing .venv-gpu is stale or broken. Recreating it.
+        rmdir /s /q ".venv-gpu" || exit /b 1
+    ) else goto :eof
+)
+
+echo [GPU-LAUNCH] Creating Windows GPU venv with %ROVER_PYTHON%...
+%ROVER_PYTHON% -c "import sys; print('[GPU-LAUNCH] Using Python ' + sys.version.split()[0] + ' at ' + sys.executable)" || exit /b 1
+%ROVER_PYTHON% -m venv ".venv-gpu" || exit /b 1
+".\.venv-gpu\Scripts\python.exe" -m pip install --upgrade pip || exit /b 1
+goto :eof
+
+:install_deps
+".\.venv-gpu\Scripts\python.exe" -m pip install -r requirements.txt || exit /b 1
+".\.venv-gpu\Scripts\python.exe" -m pip install --no-deps panda3d-imgui || exit /b 1
 goto :eof
 
 :fail

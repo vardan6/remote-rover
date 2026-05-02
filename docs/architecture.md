@@ -19,6 +19,7 @@ remote-rover/
   3d-env/
   gcs_server/
   config/
+  tools/
   docs/
 ```
 
@@ -64,6 +65,17 @@ Primary responsibilities:
 - store GCS host/port defaults
 - store video mode defaults
 - store the telemetry publishing policy and GCS presence topic settings
+
+### 4. Terrain Scene Manifest
+
+Location:
+- `config/terrain_scene.v1.json`
+
+Primary responsibilities:
+- define the current terrain heightfield
+- define roads, spawn points, and static world objects
+- provide the shared map/scene source for both the simulator and GCS
+- avoid hard-coded terrain object names, counts, coordinates, and dimensions in runtime scripts
 
 ## Data Flows
 
@@ -168,7 +180,7 @@ Current important modules:
 - `simulator/mqtt_bridge.py`: MQTT client, topic subscription, presence tracking, publish helpers
 - `simulator/gui.py`: top menu and status bar, including telemetry policy menu
 - `simulator/settings_gui.py`: settings dialogs and MQTT config fields
-- `simulator/terrain.py`: terrain/world generation
+- `simulator/terrain.py`: manifest-backed terrain heightfield, visual mesh, road coloring, and Bullet collision mesh
 - `simulator/rover.py`: rover physics and motion
 
 ### In The GCS
@@ -180,6 +192,7 @@ Current important modules:
 - `gcs_server/state.py`: in-memory runtime state and freshness tracking
 - `gcs_server/ws.py`: browser connection manager
 - `gcs_server/runtime.py`: service assembly and reconfiguration
+- `gcs_server/scene_map.py`: scene-map payload from `config/terrain_scene.v1.json`
 
 ## Current Architectural Strengths
 

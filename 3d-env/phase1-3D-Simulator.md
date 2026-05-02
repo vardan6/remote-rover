@@ -3,7 +3,7 @@
 > Historical Phase 1 snapshot.
 > For the current documentation set, start with `../docs/README.md`.
 > For current MQTT behavior and Phase 2 contracts, use `mqtt-plan-canonical-2026-04-05_00-58-36.md`.
-> For current workspace structure, use `../README.md` and `../remote_rover_architecture_and_implementation_plan.md`.
+> For current workspace structure, use `../README.md` and `../docs/architecture.md`.
 
 ## Overview
 
@@ -81,4 +81,4 @@ Added after Phase 1:
 This document is intentionally brief and historical.
 The current authoritative simulator/MQTT runtime behavior is defined by code plus:
 - `mqtt-plan-canonical-2026-04-05_00-58-36.md`
-- `../PROJECT_REVIEW_AND_CURRENT_STATE.md`
+- `../docs/current-state.md`

@@ -55,6 +55,8 @@ It is already a working integrated prototype with:
 - end-to-end telemetry
 - end-to-end simulated camera feed
 - shared configuration across the simulator and GCS
+- GCS-side replay/session logging with a separate replay page and first map playback
+- a shared explicit terrain scene manifest consumed by the simulator and GCS map payload
 - a bandwidth-saving mechanism that suppresses simulator outbound publishing when no active GCS is present
 
 ## Why The Telemetry Gating Matters
@@ -71,7 +73,10 @@ This is an example of the project moving beyond simple feature bootstrap into op
 The current system is strong as a prototype, but it is not yet production-ready.
 
 Main limitations:
+- `rover-sim-next` is scaffolded but not yet a working successor simulator backend
 - the current video path is a bootstrap transport, not the final media architecture
+- live map is implemented on replay, not on the main dashboard yet
+- synchronized recorded video playback is not implemented
 - GCS runtime state is still single-instance and memory-based
 - authentication and authorization are not implemented
 - multi-GCS operating policy still needs a clearer formal definition
@@ -83,13 +88,16 @@ The most accurate way to present the project today is:
 
 > Remote Rover is a working integrated prototype. The full control, telemetry, and video loop already works across the simulator and the browser-based Ground Control Station. The architecture is correctly split into separate applications, and the remaining work is mainly production hardening rather than core feature invention.
 
+The main next implementation milestone is completing `rover-sim-next` as a working GCS-compatible successor backend while keeping the current `3d-env` simulator usable.
+
 ## Recommended Next Milestones
 
-1. Harden the current MQTT and presence-driven runtime behavior.
-2. Define the multi-GCS operational model clearly.
-3. Move shared GCS runtime state to Redis or another shared backend.
-4. Replace the current bootstrap video path with a production-grade media transport such as WebRTC.
-5. Add authentication, authorization, and stronger operational controls.
+1. Make `rover-sim-next` launch, drive, publish telemetry, and provide camera compatibility through the existing GCS contract.
+2. Harden the current MQTT and presence-driven runtime behavior.
+3. Define the multi-GCS operational model clearly.
+4. Move shared GCS runtime state to Redis or another shared backend.
+5. Replace the current bootstrap video path with a production-grade media transport such as WebRTC.
+6. Add authentication, authorization, and stronger operational controls.
 
 ## Where To Read More
 

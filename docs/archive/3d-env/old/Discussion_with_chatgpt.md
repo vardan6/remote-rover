@@ -512,7 +512,7 @@ I want to develop this in the cloud code CLI using VS Code, and I want it to be 
 I created the Markdown file you requested.
 
 You can download it here:  
-[Download the Markdown file](sandbox:/mnt/data/Rover3DEnva.md)
+Archived note: the original conversation linked to a sandbox-only `Rover3DEnva.md` download that is not part of this repository.
 
 This file contains a **complete Cloud Code project prompt** including:
 

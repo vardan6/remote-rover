@@ -15,6 +15,19 @@ This initial scaffold establishes:
 - a placeholder rover model directory for future `URDF`/`Xacro`
 - a placeholder world directory for future modular `SDF` worlds
 
+## Run Status
+
+This subproject is not yet a working simulator backend.
+
+There is currently no supported end-to-end run command equivalent to:
+- `3d-env/run.sh`
+- `python -m gcs_server`
+
+Until the first ROS 2 + Gazebo milestone is implemented, use:
+- `3d-env/` for the runnable simulator
+- `gcs_server/` for the runnable Ground Control Station
+- `docs/operations/run-and-config.md` for current run instructions
+
 ## Contract Goal
 
 During transition, this simulator should preserve compatibility with the existing GCS MQTT contract:
